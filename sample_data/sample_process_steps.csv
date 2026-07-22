@@ -1,0 +1,13 @@
+step_number,step_name,description,owner,system_used,is_decision,cycle_time_minutes
+1,Receive vendor invoice via email,Vendor sends PDF invoice to shared AP mailbox,Vendor,Outlook,False,1
+2,Save invoice attachment to SharePoint,AP Clerk downloads and files the PDF,AP Clerk,SharePoint,False,4
+3,Manually log invoice details in Excel,Re-key vendor/invoice/amount/PO into tracking sheet,AP Clerk,Excel,False,8
+4,Perform 3-way match in SAP,Match invoice to PO and goods receipt,AP Clerk,SAP,False,6
+5,Resolve PO mismatch with vendor/procurement,Email vendor or procurement and wait for reply,AP Clerk,Outlook,True,180
+6,Key invoice into SAP FI,Enter validated invoice as a vendor document,AP Clerk,SAP,False,7
+7,Route for approval over threshold,Send to approver via DocuSign for sign-off,Finance Manager,DocuSign,True,720
+8,Check approval status and update log,Daily check of DocuSign and Excel update,AP Clerk,Excel,False,3
+9,Release invoice for payment,Select payment run batch in SAP,AP Clerk,SAP,False,3
+10,Execute payment batch,Weekly payment run,Treasury Analyst,SAP,False,2
+11,Archive invoice and close log,File PDF and close tracking entry,AP Clerk,SharePoint,False,3
+12,Respond to vendor payment status inquiry,Look up status across systems and reply,AP Clerk,Excel,False,5

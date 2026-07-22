@@ -1,0 +1,13 @@
+.venv/
+.venv_test/
+__pycache__/
+*.pyc
+.git/
+.pytest_cache/
+data/chroma/
+data/uploads/*
+logs/
+.env
+tests/
+docs/
+*.md

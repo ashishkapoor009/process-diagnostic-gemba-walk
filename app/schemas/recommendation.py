@@ -1,0 +1,91 @@
+"""Schemas for improvement recommendations, prioritization scoring and the
+estimated savings that back the 25-30% efficiency target.
+"""
+from __future__ import annotations
+
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
+from app.schemas.enums import (
+    AutomationTool,
+    ComplexityLevel,
+    ImprovementCategory,
+    RiskLevel,
+    RoadmapHorizon,
+    SourceType,
+)
+
+
+class PrioritizationScore(BaseModel):
+    business_impact: float = Field(..., ge=0, le=10)
+    implementation_effort: float = Field(..., ge=0, le=10, description="Higher = more effort")
+    cost: float = Field(..., ge=0, le=10, description="Higher = more costly")
+    roi: float = Field(..., ge=0, le=10)
+    risk: float = Field(..., ge=0, le=10, description="Higher = riskier")
+    time_to_value_weeks: float = Field(..., ge=0)
+
+    @property
+    def priority_index(self) -> float:
+        """Simple weighted index: reward impact + ROI, penalize effort/cost/risk.
+        Scaled 0-10, used to sort the prioritization matrix and quadrant chart.
+        """
+        score = (
+            (self.business_impact * 0.35)
+            + (self.roi * 0.30)
+            - (self.implementation_effort * 0.15)
+            - (self.cost * 0.10)
+            - (self.risk * 0.10)
+        )
+        # Recenter around a 0-10 scale (raw score naturally clusters near 0).
+        return round(max(0.0, min(10.0, score + 5.0)), 2)
+
+    @property
+    def quadrant(self) -> str:
+        high_impact = self.business_impact >= 6
+        low_effort = self.implementation_effort <= 5
+        if high_impact and low_effort:
+            return "Quick Win"
+        if high_impact and not low_effort:
+            return "Strategic Project"
+        if not high_impact and low_effort:
+            return "Fill-In"
+        return "Transformation Initiative"
+
+
+class SavingsEstimate(BaseModel):
+    time_savings_minutes_per_txn: float = Field(0, ge=0)
+    fte_savings: float = Field(0, ge=0)
+    annual_cost_savings: float = Field(0, ge=0)
+    cycle_time_reduction_pct: float = Field(0, ge=0, le=100)
+    aht_reduction_pct: float = Field(0, ge=0, le=100)
+    quality_improvement_pct: float = Field(0, ge=0, le=100)
+    sla_improvement_pct: float = Field(0, ge=0, le=100)
+    productivity_increase_pct: float = Field(0, ge=0, le=100)
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class Recommendation(BaseModel):
+    id: Optional[int] = None
+    step_number: Optional[int] = Field(None, description="Null = process-level recommendation")
+    category: ImprovementCategory
+    sub_category: Optional[AutomationTool] = None
+    title: str
+    description: str
+    rationale: str = ""
+
+    proposed_by_agent: str = Field(..., description="Which agent authored this: PE / Automation / AI / Kaizen")
+    roadmap_horizon: RoadmapHorizon = RoadmapHorizon.DAYS_60
+    complexity: ComplexityLevel = ComplexityLevel.MEDIUM
+    risk_level: RiskLevel = RiskLevel.LOW
+
+    prioritization: PrioritizationScore
+    savings: SavingsEstimate = Field(default_factory=SavingsEstimate)
+
+    confidence_score: float = Field(0.75, ge=0, le=1)
+    source_type: SourceType = SourceType.LLM_REASONING
+    retrieved_context_refs: list[str] = Field(default_factory=list)
+
+    reviewer_notes: Optional[str] = None
+    is_duplicate: bool = False
+    reviewer_approved: bool = True

@@ -1,0 +1,30 @@
+Sample Process: Accounts Payable - Vendor Invoice Processing
+Department: Finance Operations | Business Function: Procure-to-Pay
+Country: India | LOB: Shared Services Finance
+Current FTE: 6 | Current Volume: 3200 invoices/month | AHT: 22 minutes
+
+Pain Areas: High rework due to missing PO numbers, frequent email back-and-forth
+with vendors, month-end backlog, manual 3-way matching.
+Customer Complaints: Vendors complain about delayed payments and lack of status visibility.
+Dependencies: Depends on Procurement for PO data and on Treasury for payment batch cutoff times.
+Current SLA: Invoice processed within 5 business days of receipt.
+Known Risks: Duplicate payment risk when invoice numbers aren't validated against SAP.
+Applications Used: Outlook, Excel, SAP FI/MM, DocuSign (for approvals over $10,000)
+Systems Used: SAP ERP, shared mailbox, SharePoint for invoice archive
+Manual Activities: Manual data entry into SAP, manual 3-way match, manual email routing for approvals
+Automation Already Implemented: None
+Compliance Requirements: SOX controls on payment approval segregation of duties
+
+Process Steps:
+1. Vendor sends invoice via email to shared AP mailbox (Vendor, external)
+2. AP Clerk manually opens email, downloads PDF invoice attachment, and saves it to a SharePoint folder (AP Clerk, Outlook/SharePoint, ~4 min)
+3. AP Clerk manually reads the invoice and re-types vendor name, invoice number, amount, and PO number into an Excel tracking log (AP Clerk, Excel, ~8 min)
+4. AP Clerk searches SAP for the matching Purchase Order and Goods Receipt to perform a 3-way match (AP Clerk, SAP, ~6 min)
+5. If PO number is missing or mismatched, AP Clerk emails the vendor and/or Procurement requesting clarification and WAITS for a reply (AP Clerk, Outlook, wait time can be 2-5 business days)
+6. AP Clerk manually keys the validated invoice into SAP FI as a vendor invoice document (AP Clerk, SAP, ~7 min)
+7. System routes the invoice for approval; for invoices over $10,000 an approver must sign via DocuSign (Finance Manager, DocuSign, wait time 1-2 business days)
+8. AP Clerk checks DocuSign daily for completed approvals and manually updates the Excel tracking log status (AP Clerk, Excel/DocuSign, ~3 min)
+9. AP Clerk releases the invoice for payment in SAP, selecting the appropriate payment run batch (AP Clerk, SAP, ~3 min)
+10. Treasury executes the weekly payment batch run in SAP (Treasury Analyst, SAP, ~2 min per invoice amortized)
+11. AP Clerk manually archives the invoice PDF and closes out the Excel tracking log entry (AP Clerk, Excel/SharePoint, ~3 min)
+12. If a vendor calls or emails asking for payment status, AP Clerk manually looks it up across Excel and SAP and replies (AP Clerk, Excel/SAP/Outlook, ~5 min per inquiry, high frequency during month-end)
