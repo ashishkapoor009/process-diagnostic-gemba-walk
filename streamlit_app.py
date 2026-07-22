@@ -78,22 +78,21 @@ with left:
                 )
                 if c3.button("Open ➜", key=f"open_{p['id']}"):
                     st.session_state.current_process_id = p["id"]
-                    st.switch_page("pages/5_📄_Reports.py")
+                    st.switch_page("pages/4_📄_Reports.py")
 
 with right:
     st.subheader("Get Started")
     st.markdown(
         f"""
-        {badge("1. Upload / Intake", "blue")}<br>Enter process metadata or upload a process map.<br><br>
-        {badge("2. Process Analysis", "blue")}<br>Six ReAct agents run the Gemba-walk diagnostic.<br><br>
-        {badge("3. AI Recommendations", "blue")}<br>Review Lean, Automation & AI opportunities.<br><br>
-        {badge("4. Process Flow", "blue")}<br>Current vs. future-state flow, bottleneck & priority maps.<br><br>
-        {badge("5. Reports", "blue")}<br>Download PDF / Word / Excel / PowerPoint.
+        {badge("1. Intake & Analysis", "blue")}<br>Enter process details, add steps (typed or uploaded), and run the six-agent diagnostic - all on one page.<br><br>
+        {badge("2. AI Recommendations", "blue")}<br>Review Lean, Automation & AI opportunities.<br><br>
+        {badge("3. Process Flow", "blue")}<br>Current vs. future-state flow, bottleneck & priority maps.<br><br>
+        {badge("4. Reports", "blue")}<br>Download PDF / Word / Excel / PowerPoint.
         """,
         unsafe_allow_html=True,
     )
     if st.button("🚀 Start New Diagnostic", type="primary", use_container_width=True):
-        st.switch_page("pages/1_📤_Upload.py")
+        st.switch_page("pages/1_📋_Process_Intake_&_Analysis.py")
 
 st.divider()
 st.caption(

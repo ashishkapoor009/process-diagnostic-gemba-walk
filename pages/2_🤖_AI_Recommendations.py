@@ -29,8 +29,8 @@ recommendations = final_state.get("recommendations", []) if final_state else []
 
 if not recommendations:
     st.warning("No recommendations yet. Run the diagnostic on the Process Analysis page first.")
-    if st.button("⬅️ Go to Process Analysis"):
-        st.switch_page("pages/2_🔍_Process_Analysis.py")
+    if st.button("⬅️ Go to Process Intake & Analysis"):
+        st.switch_page("pages/1_📋_Process_Intake_&_Analysis.py")
     st.stop()
 
 CATEGORY_COLOR = {
@@ -154,4 +154,4 @@ with tab_visual:
     st.plotly_chart(automation_ai_heatmap(diagnostics), use_container_width=True)
 
 if st.button("➡️ View Process Flow", type="primary"):
-    st.switch_page("pages/4_🔀_Process_Flow.py")
+    st.switch_page("pages/3_🔀_Process_Flow.py")

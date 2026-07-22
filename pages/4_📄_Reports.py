@@ -42,8 +42,8 @@ if ctx is None:
 
 if ctx is None:
     st.warning("No diagnostic available. Run the Process Analysis first, or open a saved process from the Dashboard.")
-    if st.button("⬅️ Go to Process Analysis"):
-        st.switch_page("pages/2_🔍_Process_Analysis.py")
+    if st.button("⬅️ Go to Process Intake & Analysis"):
+        st.switch_page("pages/1_📋_Process_Intake_&_Analysis.py")
     st.stop()
 
 st.subheader(f"Report Package: {ctx.metadata.process_name}")

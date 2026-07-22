@@ -19,8 +19,8 @@ page_header("Process Flow", "Current vs. future-state flow, value stream map, bo
 final_state = st.session_state.get("final_state")
 if not final_state or not final_state.get("diagnostics"):
     st.warning("No process flow yet. Run the diagnostic on the Process Analysis page first.")
-    if st.button("⬅️ Go to Process Analysis"):
-        st.switch_page("pages/2_🔍_Process_Analysis.py")
+    if st.button("⬅️ Go to Process Intake & Analysis"):
+        st.switch_page("pages/1_📋_Process_Intake_&_Analysis.py")
     st.stop()
 
 diagnostics = final_state["diagnostics"]
@@ -55,4 +55,4 @@ with tab_priority:
     st.plotly_chart(roadmap_timeline(recommendations), use_container_width=True)
 
 if st.button("➡️ Generate Reports", type="primary"):
-    st.switch_page("pages/5_📄_Reports.py")
+    st.switch_page("pages/4_📄_Reports.py")
