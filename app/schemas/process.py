@@ -16,12 +16,10 @@ class ProcessMetadata(BaseModel):
 
     # Mandatory
     process_name: str = Field(..., min_length=2, max_length=200)
-    department: str = Field(..., min_length=2, max_length=120)
-    business_function: str = Field(..., min_length=2, max_length=120)
+    team_name: str = Field(..., min_length=2, max_length=120)
     current_fte: float = Field(..., gt=0)
     current_volume: float = Field(..., gt=0, description="Transactions handled per period (e.g. per month)")
     aht_minutes: float = Field(..., gt=0, description="Average Handle Time in minutes")
-    country: str = Field(..., min_length=2, max_length=80)
     lob: str = Field(..., min_length=2, max_length=120, description="Line of Business")
 
     # Optional
@@ -36,7 +34,7 @@ class ProcessMetadata(BaseModel):
     automation_already_implemented: Optional[str] = None
     compliance_requirements: Optional[str] = None
 
-    @field_validator("process_name", "department", "business_function", "country", "lob")
+    @field_validator("process_name", "team_name", "lob")
     @classmethod
     def _strip(cls, v: str) -> str:
         return v.strip()

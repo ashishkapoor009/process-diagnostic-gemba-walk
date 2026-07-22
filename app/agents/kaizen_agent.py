@@ -74,7 +74,7 @@ def run_kaizen_agent(metadata: ProcessMetadata, diagnostics: list[ProcessStepDia
     )
 
     user_message = (
-        f"Process: {metadata.process_name} | Department: {metadata.department} | "
+        f"Process: {metadata.process_name} | Team: {metadata.team_name} | "
         f"FTE: {metadata.current_fte} | Volume: {metadata.current_volume}/period | "
         f"AHT: {metadata.aht_minutes} min\n"
         f"Pain areas: {metadata.pain_areas or 'not stated'}\n"

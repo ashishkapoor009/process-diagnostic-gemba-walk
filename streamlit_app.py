@@ -71,7 +71,7 @@ with left:
         for p in processes[:10]:
             with st.container(border=True):
                 c1, c2, c3 = st.columns([3, 2, 1])
-                c1.markdown(f"**{p['process_name']}**  \n{p['department']} | {p['lob']}")
+                c1.markdown(f"**{p['process_name']}**  \n{p['team_name']} | {p['lob']}")
                 c2.markdown(
                     f"FTE: {p['current_fte']} | Volume: {p['current_volume']} | AHT: {p['aht_minutes']}m  \n"
                     f"{p['created_at']:%Y-%m-%d %H:%M}"

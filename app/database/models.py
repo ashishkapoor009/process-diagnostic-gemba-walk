@@ -70,12 +70,10 @@ class Process(Base):
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
 
     process_name: Mapped[str] = mapped_column(String(200))
-    department: Mapped[str] = mapped_column(String(150))
-    business_function: Mapped[str] = mapped_column(String(150))
+    team_name: Mapped[str] = mapped_column(String(150))
     current_fte: Mapped[float] = mapped_column(Float)
     current_volume: Mapped[float] = mapped_column(Float)
     aht_minutes: Mapped[float] = mapped_column(Float)
-    country: Mapped[str] = mapped_column(String(100))
     lob: Mapped[str] = mapped_column(String(150))
 
     pain_areas: Mapped[str | None] = mapped_column(Text, nullable=True)

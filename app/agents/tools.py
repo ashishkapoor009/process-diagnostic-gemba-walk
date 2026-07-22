@@ -23,7 +23,7 @@ def build_process_lookup_tool(metadata: dict, steps: list[dict]):
     @tool("get_process_details")
     def get_process_details(field: str = "all") -> str:
         """Look up details about the process under analysis. Pass 'metadata'
-        for process-level facts (FTE, volume, AHT, department, pain areas,
+        for process-level facts (FTE, volume, AHT, team name, pain areas,
         systems used, compliance requirements, etc.), 'steps' for the list
         of raw process steps, or 'all' for both.
         """

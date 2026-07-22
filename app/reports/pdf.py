@@ -63,8 +63,8 @@ def generate_pdf_report(ctx: ReportContext) -> bytes:
     story.append(Paragraph("Process Diagnostic / Gemba Walk Report", styles["Title"]))
     story.append(Paragraph(ctx.metadata.process_name, styles["H2Brand"]))
     story.append(Paragraph(
-        f"{ctx.metadata.department} | {ctx.metadata.business_function} | {ctx.metadata.lob} | "
-        f"{ctx.metadata.country} | Generated {ctx.generated_at:%Y-%m-%d %H:%M} UTC", styles["BodyBrand"]
+        f"{ctx.metadata.team_name} | {ctx.metadata.lob} | "
+        f"Generated {ctx.generated_at:%Y-%m-%d %H:%M} UTC", styles["BodyBrand"]
     ))
     story.append(Spacer(1, 12))
 

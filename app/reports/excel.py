@@ -22,13 +22,13 @@ def generate_excel_report(ctx: ReportContext) -> bytes:
         overview_df = pd.DataFrame(
             {
                 "Field": [
-                    "Process Name", "Department", "Business Function", "Current FTE", "Current Volume",
-                    "AHT (min)", "Country", "LOB", "Pain Areas", "Current SLA", "Compliance Requirements",
+                    "Process Name", "Team Name", "Current FTE", "Current Volume",
+                    "AHT (min)", "LOB", "Pain Areas", "Current SLA", "Compliance Requirements",
                 ],
                 "Value": [
-                    ctx.metadata.process_name, ctx.metadata.department, ctx.metadata.business_function,
+                    ctx.metadata.process_name, ctx.metadata.team_name,
                     ctx.metadata.current_fte, ctx.metadata.current_volume, ctx.metadata.aht_minutes,
-                    ctx.metadata.country, ctx.metadata.lob, ctx.metadata.pain_areas or "",
+                    ctx.metadata.lob, ctx.metadata.pain_areas or "",
                     ctx.metadata.current_sla or "", ctx.metadata.compliance_requirements or "",
                 ],
             }

@@ -36,9 +36,9 @@ def sample_metadata():
     from app.schemas.process import ProcessMetadata
 
     return ProcessMetadata(
-        process_name="Vendor Invoice Processing", department="Finance Operations",
-        business_function="Procure-to-Pay", current_fte=6, current_volume=3200,
-        aht_minutes=22, country="India", lob="Shared Services Finance",
+        process_name="Vendor Invoice Processing", team_name="Finance Operations",
+        current_fte=6, current_volume=3200,
+        aht_minutes=22, lob="Shared Services Finance",
         pain_areas="High rework, manual 3-way match", compliance_requirements="SOX segregation of duties",
     )
 

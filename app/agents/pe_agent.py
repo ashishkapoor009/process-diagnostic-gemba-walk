@@ -63,10 +63,10 @@ def run_pe_agent(metadata: ProcessMetadata, raw_steps: list[ProcessStepInput]) -
     )
 
     user_message = (
-        f"Process: {metadata.process_name} | Department: {metadata.department} | "
-        f"Function: {metadata.business_function} | FTE: {metadata.current_fte} | "
+        f"Process: {metadata.process_name} | Team: {metadata.team_name} | "
+        f"FTE: {metadata.current_fte} | "
         f"Volume: {metadata.current_volume} | AHT: {metadata.aht_minutes} min | "
-        f"Country: {metadata.country} | LOB: {metadata.lob}\n"
+        f"LOB: {metadata.lob}\n"
         f"Pain areas: {metadata.pain_areas or 'none stated'}\n"
         f"Known risks: {metadata.known_risks or 'none stated'}\n"
         f"Compliance requirements: {metadata.compliance_requirements or 'none stated'}\n"

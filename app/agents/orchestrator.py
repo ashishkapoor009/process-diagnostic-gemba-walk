@@ -152,7 +152,7 @@ def _generate_executive_summary(metadata, diagnostics, recommendations, savings:
 
     prompt = f"""You are a Senior Director of Process Excellence delivering the final
 executive summary of a Gemba walk diagnostic for "{metadata.process_name}"
-({metadata.department}, {metadata.business_function}, {metadata.country}).
+(Team: {metadata.team_name}).
 
 Baseline: {metadata.current_fte} FTE, {metadata.current_volume} volume/period,
 {metadata.aht_minutes} min AHT. Process Cycle Efficiency: {savings['baseline']['process_cycle_efficiency_pct']}%.

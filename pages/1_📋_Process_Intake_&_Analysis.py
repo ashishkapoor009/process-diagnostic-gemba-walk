@@ -37,17 +37,15 @@ if not settings.llm_configured:
 # ---------------------------------------------------------------------------
 st.subheader("1. Process Details")
 with st.form("process_metadata_form"):
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     process_name = c1.text_input("Process Name*", value=st.session_state.get("meta_process_name", ""))
-    department = c2.text_input("Department*", value=st.session_state.get("meta_department", ""))
-    business_function = c3.text_input("Business Function*", value=st.session_state.get("meta_business_function", ""))
-    country = c4.text_input("Country*", value=st.session_state.get("meta_country", ""))
+    team_name = c2.text_input("Team Name*", value=st.session_state.get("meta_team_name", ""))
+    lob = c3.text_input("LOB (Line of Business)*", value=st.session_state.get("meta_lob", ""))
 
-    c5, c6, c7, c8 = st.columns(4)
-    current_fte = c5.number_input("Current FTE*", min_value=0.1, value=st.session_state.get("meta_fte", 5.0), step=0.5)
-    current_volume = c6.number_input("Current Volume (per period)*", min_value=1.0, value=st.session_state.get("meta_volume", 1000.0), step=10.0)
-    aht_minutes = c7.number_input("Average Handle Time - AHT (minutes)*", min_value=0.1, value=st.session_state.get("meta_aht", 15.0), step=0.5)
-    lob = c8.text_input("LOB (Line of Business)*", value=st.session_state.get("meta_lob", ""))
+    c4, c5, c6 = st.columns(3)
+    current_fte = c4.number_input("Current FTE*", min_value=0.1, value=st.session_state.get("meta_fte", 5.0), step=0.5)
+    current_volume = c5.number_input("Current Volume (per period)*", min_value=1.0, value=st.session_state.get("meta_volume", 1000.0), step=10.0)
+    aht_minutes = c6.number_input("Average Handle Time - AHT (minutes)*", min_value=0.1, value=st.session_state.get("meta_aht", 15.0), step=0.5)
 
     with st.expander("➕ Optional details (pain areas, dependencies, risks, systems...)"):
         o1, o2 = st.columns(2)
@@ -71,9 +69,9 @@ with st.form("process_metadata_form"):
     if submitted:
         try:
             metadata = ProcessMetadata(
-                process_name=process_name, department=department, business_function=business_function,
+                process_name=process_name, team_name=team_name,
                 current_fte=current_fte, current_volume=current_volume, aht_minutes=aht_minutes,
-                country=country, lob=lob, pain_areas=pain_areas or None, customer_complaints=customer_complaints or None,
+                lob=lob, pain_areas=pain_areas or None, customer_complaints=customer_complaints or None,
                 dependencies=dependencies or None, current_sla=current_sla or None, known_risks=known_risks or None,
                 applications_used=applications_used or None, systems_used=systems_used or None,
                 manual_activities=manual_activities or None,
@@ -82,8 +80,7 @@ with st.form("process_metadata_form"):
             )
             st.session_state.process_metadata = metadata
             for k, v in {
-                "meta_process_name": process_name, "meta_department": department,
-                "meta_business_function": business_function, "meta_country": country, "meta_fte": current_fte,
+                "meta_process_name": process_name, "meta_team_name": team_name, "meta_fte": current_fte,
                 "meta_volume": current_volume, "meta_aht": aht_minutes, "meta_lob": lob,
                 "meta_pain_areas": pain_areas, "meta_complaints": customer_complaints,
                 "meta_dependencies": dependencies, "meta_sla": current_sla, "meta_risks": known_risks,

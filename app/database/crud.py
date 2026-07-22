@@ -252,7 +252,7 @@ def list_processes(project_id: Optional[int] = None) -> list[dict]:
             {
                 "id": p.id,
                 "process_name": p.process_name,
-                "department": p.department,
+                "team_name": p.team_name,
                 "lob": p.lob,
                 "current_fte": p.current_fte,
                 "current_volume": p.current_volume,

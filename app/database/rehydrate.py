@@ -31,10 +31,10 @@ def _enum_or(enum_cls, value, default):
 
 def rehydrate_process_metadata(process) -> ProcessMetadata:
     return ProcessMetadata(
-        process_name=process.process_name, department=process.department,
-        business_function=process.business_function, current_fte=process.current_fte,
+        process_name=process.process_name, team_name=process.team_name,
+        current_fte=process.current_fte,
         current_volume=process.current_volume, aht_minutes=process.aht_minutes,
-        country=process.country, lob=process.lob, pain_areas=process.pain_areas,
+        lob=process.lob, pain_areas=process.pain_areas,
         customer_complaints=process.customer_complaints, dependencies=process.dependencies,
         current_sla=process.current_sla, known_risks=process.known_risks,
         applications_used=process.applications_used, systems_used=process.systems_used,

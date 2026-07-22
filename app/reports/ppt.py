@@ -22,7 +22,7 @@ def _title_slide(prs: Presentation, ctx: ReportContext):
     slide.shapes.title.text = "Process Diagnostic / Gemba Walk"
     slide.shapes.title.text_frame.paragraphs[0].font.color.rgb = BRAND_BLUE
     subtitle = slide.placeholders[1]
-    subtitle.text = f"{ctx.metadata.process_name}\n{ctx.metadata.department} | {ctx.metadata.lob} | {ctx.metadata.country}"
+    subtitle.text = f"{ctx.metadata.process_name}\n{ctx.metadata.team_name} | {ctx.metadata.lob}"
 
 
 def _bullet_slide(prs: Presentation, title: str, bullets: list[str]):

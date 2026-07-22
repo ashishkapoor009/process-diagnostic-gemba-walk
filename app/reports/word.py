@@ -41,8 +41,8 @@ def generate_word_report(ctx: ReportContext) -> bytes:
 
     doc.add_paragraph(ctx.metadata.process_name).runs[0].font.size = Pt(16)
     doc.add_paragraph(
-        f"{ctx.metadata.department} | {ctx.metadata.business_function} | {ctx.metadata.lob} | "
-        f"{ctx.metadata.country} | Generated {ctx.generated_at:%Y-%m-%d %H:%M} UTC"
+        f"{ctx.metadata.team_name} | {ctx.metadata.lob} | "
+        f"Generated {ctx.generated_at:%Y-%m-%d %H:%M} UTC"
     )
 
     _heading(doc, "Executive Summary")
