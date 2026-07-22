@@ -28,16 +28,19 @@ python-pptx==1.0.2
 pytesseract==0.3.13
 Pillow==11.0.0
 opencv-python-headless==4.10.0.84
-unstructured==0.16.11
 openpyxl==3.1.5
 
 # --- Graphs / visualization ---
 networkx==3.4.2
-graphviz==0.20.3
 plotly==5.24.1
 pandas==2.2.3
-matplotlib==3.9.3
-kaleido==0.2.1
+
+# --- Optional: only needed for the unstructured.io fallback parser used on
+# rare formats not natively handled (legacy .doc, .vsdx). Very heavy/fragile
+# dependency tree - install separately (`pip install unstructured==0.16.11`)
+# only if you need that specific fallback. app/extraction/document_parser.py
+# already degrades gracefully (logs a warning) when it isn't installed.
+# unstructured==0.16.11
 
 # --- Reports ---
 reportlab==4.2.5
