@@ -7,6 +7,10 @@ tool without embedding Streamlit. Run with:
 """
 from __future__ import annotations
 
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -88,6 +92,11 @@ async def extract_from_upload(file: UploadFile = File(...)) -> dict:
 
 @api.post("/api/processes")
 def create_and_run_diagnostic(payload: DiagnosticRequest) -> dict:
+    """Synchronous variant - blocks for the full 3-8 minute pipeline run.
+    Only suitable for direct backend-to-backend calls with a generous
+    timeout; browser/Vercel clients should use the async job endpoints
+    below instead (POST /api/jobs + poll GET /api/jobs/{job_id}).
+    """
     settings = get_settings()
     if not settings.llm_configured:
         raise HTTPException(status_code=503, detail="LLM credentials not configured on the server.")
@@ -104,6 +113,72 @@ def create_and_run_diagnostic(payload: DiagnosticRequest) -> dict:
         "executive_summary": final_state.get("executive_summary", ""),
         "savings_summary": final_state.get("savings_summary", {}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Async job pattern: the six-agent pipeline (RAGAS-gated, up to 2 review
+# rounds) routinely takes 3-8 minutes - far longer than any serverless
+# function timeout (Vercel caps at 60s) or typical browser fetch. The
+# frontend starts a job, gets a job_id immediately, and polls for status.
+#
+# In-memory + a small thread pool is enough for a single-instance backend
+# deployment (Render/Railway); swap for Redis/Celery if you ever run
+# multiple backend replicas.
+# ---------------------------------------------------------------------------
+_job_executor = ThreadPoolExecutor(max_workers=2)
+_jobs: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _run_diagnostic_job(job_id: str, metadata: ProcessMetadata, steps: list[ProcessStepInput],
+                          project_id: int | None) -> None:
+    with _jobs_lock:
+        _jobs[job_id]["status"] = "running"
+        _jobs[job_id]["started_at"] = _now()
+    try:
+        process_id, final_state = run_and_persist_pipeline(metadata, steps, project_id)
+        with _jobs_lock:
+            _jobs[job_id].update(
+                status="completed",
+                completed_at=_now(),
+                process_id=process_id,
+                result={
+                    "diagnostics_count": len(final_state.get("diagnostics", [])),
+                    "recommendations_count": len(final_state.get("recommendations", [])),
+                    "executive_summary": final_state.get("executive_summary", ""),
+                    "savings_summary": final_state.get("savings_summary", {}),
+                },
+            )
+    except Exception as exc:
+        logger.exception(f"Diagnostic job {job_id} failed")
+        with _jobs_lock:
+            _jobs[job_id].update(status="failed", completed_at=_now(), error=str(exc))
+
+
+@api.post("/api/jobs")
+def start_diagnostic_job(payload: DiagnosticRequest) -> dict:
+    settings = get_settings()
+    if not settings.llm_configured:
+        raise HTTPException(status_code=503, detail="LLM credentials not configured on the server.")
+
+    job_id = str(uuid.uuid4())
+    with _jobs_lock:
+        _jobs[job_id] = {"status": "queued", "created_at": _now()}
+    _job_executor.submit(_run_diagnostic_job, job_id, payload.metadata, payload.steps, payload.project_id)
+    return {"job_id": job_id, "status": "queued"}
+
+
+@api.get("/api/jobs/{job_id}")
+def get_job_status(job_id: str) -> dict:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return {"job_id": job_id, **job}
 
 
 @api.get("/api/processes")
