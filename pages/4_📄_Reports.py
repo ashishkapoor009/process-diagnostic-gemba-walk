@@ -4,6 +4,7 @@ or any previously saved process reopened from the Dashboard.
 """
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from app.database.rehydrate import load_report_context
@@ -12,6 +13,7 @@ from app.reports.pdf import generate_pdf_report
 from app.reports.ppt import generate_ppt_report
 from app.reports.report_data import ReportContext
 from app.reports.word import generate_word_report
+from app.schemas.enums import efficiency_plan_for_category, main_category_for_category, sub_category_label
 from app.ui.styling import apply_branding, page_header
 
 st.set_page_config(page_title="Reports", page_icon="📄", layout="wide")
@@ -56,6 +58,66 @@ m4.metric("Efficiency Improvement", f"{s.get('blended_efficiency_improvement_pct
 
 with st.expander("Executive Summary", expanded=True):
     st.markdown(ctx.executive_summary or "_Not yet generated._")
+
+st.divider()
+st.subheader("All Recommendations")
+st.caption(
+    "Every recommendation, categorized People / Process / Technology (main category) with a "
+    "specific sub-category, plus how the efficiency gain is actually generated."
+)
+
+if not ctx.recommendations:
+    st.info("No recommendations to show.")
+else:
+    rec_rows = []
+    for r in ctx.recommendations:
+        rec_rows.append(
+            {
+                "Step": r.step_number if r.step_number else "Process-level",
+                "Title": r.title,
+                "Main Category": main_category_for_category(r.category),
+                "Sub-Category": sub_category_label(r.category),
+                "Horizon": r.roadmap_horizon.value,
+                "Description": r.description,
+                "Efficiency Plan": efficiency_plan_for_category(r.category),
+                "Business Impact": r.prioritization.business_impact,
+                "Effort": r.prioritization.implementation_effort,
+                "FTE Savings": r.savings.fte_savings,
+                "Annual Savings ($)": r.savings.annual_cost_savings,
+                "Confidence": r.confidence_score,
+            }
+        )
+    rec_df = pd.DataFrame(rec_rows)
+
+    f1, f2 = st.columns(2)
+    main_cats = f1.multiselect("Filter by Main Category", ["People", "Process", "Technology"], default=["People", "Process", "Technology"])
+    sub_cats = f2.multiselect("Filter by Sub-Category", sorted(rec_df["Sub-Category"].unique()), default=sorted(rec_df["Sub-Category"].unique()))
+    filtered_df = rec_df[rec_df["Main Category"].isin(main_cats) & rec_df["Sub-Category"].isin(sub_cats)]
+
+    st.caption(f"Showing {len(filtered_df)} of {len(rec_df)} recommendations.")
+    st.dataframe(
+        filtered_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Business Impact": st.column_config.ProgressColumn("Business Impact", min_value=0, max_value=10, format="%.0f"),
+            "Effort": st.column_config.ProgressColumn("Effort", min_value=0, max_value=10, format="%.0f"),
+            "Confidence": st.column_config.ProgressColumn("Confidence", min_value=0, max_value=1, format="%.0%%"),
+            "Annual Savings ($)": st.column_config.NumberColumn("Annual Savings ($)", format="$%.0f"),
+            "Description": st.column_config.TextColumn("Description", width="large"),
+            "Efficiency Plan": st.column_config.TextColumn("Efficiency Plan", width="large"),
+        },
+    )
+
+    cat_summary = rec_df.groupby("Main Category").agg(
+        Count=("Title", "count"), FTE_Savings=("FTE Savings", "sum"), Annual_Savings=("Annual Savings ($)", "sum")
+    ).reset_index()
+    sc1, sc2, sc3 = st.columns(3)
+    for col, main_cat in zip((sc1, sc2, sc3), ["People", "Process", "Technology"]):
+        row = cat_summary[cat_summary["Main Category"] == main_cat]
+        count = int(row["Count"].iloc[0]) if not row.empty else 0
+        annual = float(row["Annual_Savings"].iloc[0]) if not row.empty else 0.0
+        col.metric(main_cat, f"{count} recommendation(s)", f"${annual:,.0f}/yr")
 
 st.divider()
 st.subheader("Download Deliverables")

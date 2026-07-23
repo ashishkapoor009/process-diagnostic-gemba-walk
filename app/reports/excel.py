@@ -9,6 +9,7 @@ import io
 import pandas as pd
 
 from app.reports.report_data import ReportContext
+from app.schemas.enums import efficiency_plan_for_category, main_category_for_category, sub_category_label
 
 HEADER_FMT = {"bold": True, "bg_color": "#1D4ED8", "font_color": "white", "border": 1}
 
@@ -54,9 +55,14 @@ def generate_excel_report(ctx: ReportContext) -> bytes:
         rec_df = pd.DataFrame(
             [
                 {
-                    "Step": r.step_number or "Process-level", "Category": r.category.value,
-                    "Sub-Category": r.sub_category.value if r.sub_category else "",
-                    "Title": r.title, "Description": r.description, "Proposed By": r.proposed_by_agent,
+                    "Step": r.step_number or "Process-level",
+                    "Main Category": main_category_for_category(r.category),
+                    "Sub-Category": sub_category_label(r.category),
+                    "Improvement Category": r.category.value,
+                    "Automation Tool": r.sub_category.value if r.sub_category else "",
+                    "Title": r.title, "Description": r.description,
+                    "Efficiency Plan": efficiency_plan_for_category(r.category),
+                    "Proposed By": r.proposed_by_agent,
                     "Horizon": r.roadmap_horizon.value, "Business Impact": r.prioritization.business_impact,
                     "Effort": r.prioritization.implementation_effort, "Cost": r.prioritization.cost,
                     "ROI": r.prioritization.roi, "Risk": r.prioritization.risk,

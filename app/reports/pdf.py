@@ -20,6 +20,7 @@ from reportlab.platypus import (
 )
 
 from app.reports.report_data import ReportContext
+from app.schemas.enums import efficiency_plan_for_category, main_category_for_category, sub_category_label
 
 BLUE = colors.HexColor("#1D4ED8")
 LIGHT_BLUE = colors.HexColor("#DBEAFE")
@@ -160,12 +161,14 @@ def generate_pdf_report(ctx: ReportContext) -> bytes:
 
     story.append(PageBreak())
     story.append(Paragraph("Appendix: All Recommendations", styles["H1Brand"]))
-    appendix_rows = [["Step", "Category", "Agent", "Title", "Confidence"]]
+    appendix_rows = [["Step", "Main Cat.", "Sub-Category", "Title", "Efficiency Plan", "Confidence"]]
     for r in ctx.recommendations:
         appendix_rows.append([
-            str(r.step_number or "Process"), r.category.value, r.proposed_by_agent, r.title[:35], f"{r.confidence_score:.0%}",
+            str(r.step_number or "Process"), main_category_for_category(r.category),
+            sub_category_label(r.category), r.title[:30],
+            efficiency_plan_for_category(r.category)[:70], f"{r.confidence_score:.0%}",
         ])
-    story.append(_table(appendix_rows))
+    story.append(_table(appendix_rows, col_widths=[1.3 * cm, 1.8 * cm, 2.5 * cm, 4 * cm, 6.5 * cm, 1.6 * cm]))
 
     doc.build(story)
     return buffer.getvalue()
