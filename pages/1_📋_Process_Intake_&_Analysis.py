@@ -150,38 +150,51 @@ else:
         f"**FTE:** {metadata.current_fte} &nbsp;|&nbsp; **Volume:** {metadata.current_volume} &nbsp;|&nbsp; "
         f"**AHT:** {metadata.aht_minutes} min"
     )
-    if st.button("▶️ Run Multi-Agent Diagnostic", type="primary", disabled=not settings.llm_configured):
-        confirmed_steps = []
-        edited = st.session_state.get("steps_editor", {}).get("edited_rows", {}) if "steps_editor" in st.session_state else {}
-        base_df = pd.DataFrame([s.model_dump() for s in raw_steps])
-        for i, row in base_df.iterrows():
-            row_data = {**row.to_dict(), **edited.get(i, {})}
-            confirmed_steps.append(
-                ProcessStepInput(
-                    step_number=i + 1, step_name=str(row_data.get("step_name", f"Step {i + 1}")),
-                    description=str(row_data.get("description", "") or ""), owner=row_data.get("owner") or None,
-                    system_used=row_data.get("system_used") or None, is_decision=bool(row_data.get("is_decision", False)),
-                    cycle_time_minutes=row_data.get("cycle_time_minutes") or None,
-                )
-            )
+    is_running = st.session_state.get("diagnostic_running", False)
+    st.caption(
+        "⏱️ Typically takes **3-8 minutes** - six agents run sequentially, and the Reviewer Agent's "
+        "RAGAS evaluation (4 real LLM-judged metrics, up to 2 rounds) alone can take 1-3 minutes. "
+        "Please don't click again while it's running - a second click starts a duplicate run instead of speeding it up."
+    )
+    if is_running:
+        st.info("⏳ A diagnostic is already running for this session. Please wait for it to finish.")
 
-        with st.status("Running the six-agent Gemba Walk diagnostic...", expanded=True) as status:
-            st.write("🕵️ **PE Agent** conducting Gemba-walk diagnostic (VA/NVA, Lean waste, root cause)...")
-            st.write("⚙️ **Automation Agent** evaluating RPA / Power Automate / API opportunities...")
-            st.write("🤖 **AI Agentic Agent** evaluating GenAI / Agentic AI opportunities...")
-            st.write("📈 **Kaizen Agent** synthesizing Lean, standardization & roadmap horizons...")
-            st.write("🔀 **Process Flow Agent** generating current & future-state flow...")
-            st.write("🧐 **Reviewer Agent** critically reviewing output, gated by **RAGAS** evaluation...")
-            try:
-                process_id, final_state = run_and_persist_pipeline(metadata, confirmed_steps, project_id=None)
-                st.session_state.current_process_id = process_id
-                st.session_state.final_state = final_state
-                status.update(label="Diagnostic complete.", state="complete")
-            except Exception as exc:
-                status.update(label="Diagnostic failed.", state="error")
-                st.error(f"Pipeline error: {exc}")
-                logger.exception("Pipeline run failed")
-                st.stop()
+    if st.button("▶️ Run Multi-Agent Diagnostic", type="primary", disabled=not settings.llm_configured or is_running):
+        st.session_state.diagnostic_running = True
+        try:
+            confirmed_steps = []
+            edited = st.session_state.get("steps_editor", {}).get("edited_rows", {}) if "steps_editor" in st.session_state else {}
+            base_df = pd.DataFrame([s.model_dump() for s in raw_steps])
+            for i, row in base_df.iterrows():
+                row_data = {**row.to_dict(), **edited.get(i, {})}
+                confirmed_steps.append(
+                    ProcessStepInput(
+                        step_number=i + 1, step_name=str(row_data.get("step_name", f"Step {i + 1}")),
+                        description=str(row_data.get("description", "") or ""), owner=row_data.get("owner") or None,
+                        system_used=row_data.get("system_used") or None, is_decision=bool(row_data.get("is_decision", False)),
+                        cycle_time_minutes=row_data.get("cycle_time_minutes") or None,
+                    )
+                )
+
+            with st.status("Running the six-agent Gemba Walk diagnostic (this can take several minutes)...", expanded=True) as status:
+                st.write("🕵️ **PE Agent** conducting Gemba-walk diagnostic (VA/NVA, Lean waste, root cause)...")
+                st.write("⚙️ **Automation Agent** evaluating RPA / Power Automate / API opportunities...")
+                st.write("🤖 **AI Agentic Agent** evaluating GenAI / Agentic AI opportunities...")
+                st.write("📈 **Kaizen Agent** synthesizing Lean, standardization & roadmap horizons...")
+                st.write("🔀 **Process Flow Agent** generating current & future-state flow...")
+                st.write("🧐 **Reviewer Agent** critically reviewing output, gated by **RAGAS** evaluation (slowest step)...")
+                try:
+                    process_id, final_state = run_and_persist_pipeline(metadata, confirmed_steps, project_id=None)
+                    st.session_state.current_process_id = process_id
+                    st.session_state.final_state = final_state
+                    status.update(label="Diagnostic complete.", state="complete")
+                except Exception as exc:
+                    status.update(label="Diagnostic failed.", state="error")
+                    st.error(f"Pipeline error: {exc}")
+                    logger.exception("Pipeline run failed")
+                    st.stop()
+        finally:
+            st.session_state.diagnostic_running = False
 
 # ---------------------------------------------------------------------------
 # Results
