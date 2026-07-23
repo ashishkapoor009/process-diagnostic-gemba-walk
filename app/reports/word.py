@@ -121,10 +121,12 @@ def generate_word_report(ctx: ReportContext) -> bytes:
         doc, ["Metric", "Value"],
         [
             ["Total Recommendations", s.get("total_recommendations", "-")],
-            ["Estimated FTE Savings", s.get("total_fte_savings", "-")],
-            ["Estimated Annual Cost Savings", f"${s.get('total_annual_cost_savings', 0):,.0f}"],
+            ["Estimated FTE Savings (FTEs Released)", s.get("total_fte_savings", "-")],
+            ["In-Year Savings", f"${s.get('in_year_savings', 0):,.0f}"],
+            ["12-Month Savings (Full Run-Rate)", f"${s.get('twelve_month_savings', 0):,.0f}"],
             ["Blended Efficiency Improvement", f"{s.get('blended_efficiency_improvement_pct', '-')}%"],
             ["Target Efficiency Range", s.get("target_efficiency_range_pct", "25-30%")],
+            ["Annual FTE Cost (User Provided)", f"${s.get('annual_fte_cost', 0):,.0f}"],
         ],
     )
 

@@ -151,11 +151,13 @@ def generate_pdf_report(ctx: ReportContext) -> bytes:
         ["Total Recommendations", str(s.get("total_recommendations", "-"))],
         ["Quick Wins", str(s.get("quick_win_count", "-"))],
         ["Strategic Initiatives", str(s.get("strategic_count", "-"))],
-        ["Estimated FTE Savings", str(s.get("total_fte_savings", "-"))],
-        ["Estimated Annual Cost Savings", f"${s.get('total_annual_cost_savings', 0):,.0f}"],
+        ["Estimated FTE Savings (FTEs Released)", str(s.get("total_fte_savings", "-"))],
+        ["In-Year Savings", f"${s.get('in_year_savings', 0):,.0f}"],
+        ["12-Month Savings (Full Run-Rate)", f"${s.get('twelve_month_savings', 0):,.0f}"],
         ["Blended Efficiency Improvement", f"{s.get('blended_efficiency_improvement_pct', '-')}%"],
         ["Target Efficiency Range", str(s.get("target_efficiency_range_pct", "25-30%"))],
-        ["Assumption: Annual Cost / FTE", f"${s.get('annual_cost_per_fte_assumption', 0):,.0f}"],
+        ["Annual FTE Cost (User Provided)", f"${s.get('annual_fte_cost', 0):,.0f}"],
+        ["Months Remaining in Calendar Year", str(s.get("months_remaining_in_year", "-"))],
     ]
     story.append(_table(savings_rows, col_widths=[8 * cm, 8 * cm]))
 

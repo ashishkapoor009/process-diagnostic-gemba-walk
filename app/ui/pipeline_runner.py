@@ -22,9 +22,14 @@ def run_and_persist_pipeline(metadata: ProcessMetadata, raw_steps: list[ProcessS
     final_state = run_full_diagnostic(metadata, raw_steps)
 
     diagnostics = final_state.get("diagnostics", [])
+    future_diagnostics = final_state.get("future_diagnostics", [])
     recommendations = final_state.get("recommendations", [])
 
-    crud.save_diagnostics(process_id, diagnostics)
+    # Persist both slices of the structured process map (current + future
+    # state), then recommendations - in that order, so recommendations can
+    # resolve their process_step_id FK against the just-saved current steps.
+    crud.save_diagnostics(process_id, diagnostics, state="current")
+    crud.save_diagnostics(process_id, future_diagnostics, state="future")
     crud.save_recommendations(process_id, recommendations)
     crud.save_flow_diagrams(
         process_id, final_state.get("flow_mermaid_current", ""), final_state.get("flow_mermaid_future", "")

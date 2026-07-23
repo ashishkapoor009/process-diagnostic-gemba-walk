@@ -4,6 +4,8 @@ or any previously saved process reopened from the Dashboard.
 """
 from __future__ import annotations
 
+import datetime as dt
+
 import pandas as pd
 import streamlit as st
 
@@ -35,6 +37,7 @@ if ctx is None:
     if final_state and metadata:
         ctx = ReportContext(
             metadata=metadata, diagnostics=final_state.get("diagnostics", []),
+            future_diagnostics=final_state.get("future_diagnostics", []),
             recommendations=final_state.get("recommendations", []),
             savings_summary=final_state.get("savings_summary", {}),
             executive_summary=final_state.get("executive_summary", ""),
@@ -50,11 +53,18 @@ if ctx is None:
 
 st.subheader(f"Report Package: {ctx.metadata.process_name}")
 s = ctx.savings_summary
-m1, m2, m3, m4 = st.columns(4)
+m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Recommendations", s.get("total_recommendations", len(ctx.recommendations)))
 m2.metric("Est. FTE Savings", s.get("total_fte_savings", "-"))
-m3.metric("Est. Annual Savings", f"${s.get('total_annual_cost_savings', 0):,.0f}")
-m4.metric("Efficiency Improvement", f"{s.get('blended_efficiency_improvement_pct', '-')}%")
+m3.metric("In-Year Savings", f"${s.get('in_year_savings', 0):,.0f}")
+m4.metric("12-Month Savings", f"${s.get('twelve_month_savings', 0):,.0f}")
+m5.metric("Efficiency Improvement", f"{s.get('blended_efficiency_improvement_pct', '-')}%")
+st.caption(
+    f"In-Year Savings = monthly FTE cost (${s.get('annual_fte_cost', 0):,.0f}/yr / 12) x "
+    f"{s.get('months_remaining_in_year', '-')} months remaining in {dt.date.today().year} x "
+    f"{s.get('total_fte_savings', 0)} FTEs released. 12-Month Savings = annual FTE cost x FTEs released "
+    "(full run-rate once fully implemented)."
+)
 
 with st.expander("Executive Summary", expanded=True):
     st.markdown(ctx.executive_summary or "_Not yet generated._")

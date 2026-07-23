@@ -42,10 +42,14 @@ with st.form("process_metadata_form"):
     team_name = c2.text_input("Team Name*", value=st.session_state.get("meta_team_name", ""))
     lob = c3.text_input("LOB (Line of Business)*", value=st.session_state.get("meta_lob", ""))
 
-    c4, c5, c6 = st.columns(3)
+    c4, c5, c6, c7 = st.columns(4)
     current_fte = c4.number_input("Current FTE*", min_value=0.1, value=st.session_state.get("meta_fte", 5.0), step=0.5)
     current_volume = c5.number_input("Current Volume (per period)*", min_value=1.0, value=st.session_state.get("meta_volume", 1000.0), step=10.0)
     aht_minutes = c6.number_input("Average Handle Time - AHT (minutes)*", min_value=0.1, value=st.session_state.get("meta_aht", 15.0), step=0.5)
+    annual_fte_cost = c7.number_input(
+        "Annual FTE Cost ($)*", min_value=1.0, value=st.session_state.get("meta_fte_cost", 35000.0), step=1000.0,
+        help="Fully-loaded annual cost per FTE - used to calculate In-Year and 12-Month savings.",
+    )
 
     with st.expander("➕ Optional details (pain areas, dependencies, risks, systems...)"):
         o1, o2 = st.columns(2)
@@ -71,7 +75,7 @@ with st.form("process_metadata_form"):
             metadata = ProcessMetadata(
                 process_name=process_name, team_name=team_name,
                 current_fte=current_fte, current_volume=current_volume, aht_minutes=aht_minutes,
-                lob=lob, pain_areas=pain_areas or None, customer_complaints=customer_complaints or None,
+                lob=lob, annual_fte_cost=annual_fte_cost, pain_areas=pain_areas or None, customer_complaints=customer_complaints or None,
                 dependencies=dependencies or None, current_sla=current_sla or None, known_risks=known_risks or None,
                 applications_used=applications_used or None, systems_used=systems_used or None,
                 manual_activities=manual_activities or None,
@@ -81,7 +85,7 @@ with st.form("process_metadata_form"):
             st.session_state.process_metadata = metadata
             for k, v in {
                 "meta_process_name": process_name, "meta_team_name": team_name, "meta_fte": current_fte,
-                "meta_volume": current_volume, "meta_aht": aht_minutes, "meta_lob": lob,
+                "meta_volume": current_volume, "meta_aht": aht_minutes, "meta_lob": lob, "meta_fte_cost": annual_fte_cost,
                 "meta_pain_areas": pain_areas, "meta_complaints": customer_complaints,
                 "meta_dependencies": dependencies, "meta_sla": current_sla, "meta_risks": known_risks,
                 "meta_compliance": compliance_requirements, "meta_apps": applications_used,
@@ -148,7 +152,7 @@ else:
     st.markdown(
         f"**Process:** {metadata.process_name} &nbsp;|&nbsp; **Steps:** {len(raw_steps)} &nbsp;|&nbsp; "
         f"**FTE:** {metadata.current_fte} &nbsp;|&nbsp; **Volume:** {metadata.current_volume} &nbsp;|&nbsp; "
-        f"**AHT:** {metadata.aht_minutes} min"
+        f"**AHT:** {metadata.aht_minutes} min &nbsp;|&nbsp; **Annual FTE Cost:** ${metadata.annual_fte_cost:,.0f}"
     )
     is_running = st.session_state.get("diagnostic_running", False)
     st.caption(

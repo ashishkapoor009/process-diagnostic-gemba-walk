@@ -75,6 +75,7 @@ class Process(Base):
     current_volume: Mapped[float] = mapped_column(Float)
     aht_minutes: Mapped[float] = mapped_column(Float)
     lob: Mapped[str] = mapped_column(String(150))
+    annual_fte_cost: Mapped[float] = mapped_column(Float)
 
     pain_areas: Mapped[str | None] = mapped_column(Text, nullable=True)
     customer_complaints: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -108,6 +109,11 @@ class ProcessStep(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
+
+    # "current" = as-is diagnosed state, "future" = post-improvement state
+    # from the Process Flow Agent. Together these two slices are the
+    # structured "process map" (not just the rendered Mermaid text).
+    state: Mapped[str] = mapped_column(String(10), default="current")
 
     step_number: Mapped[int] = mapped_column(Integer)
     step_name: Mapped[str] = mapped_column(String(300))
@@ -145,6 +151,10 @@ class Recommendation(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
     step_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Proper FK mapping this recommendation to its current-state process
+    # step row (in addition to the looser step_number match kept for
+    # backward compatibility / process-level recommendations where it's null).
+    process_step_id: Mapped[int | None] = mapped_column(ForeignKey("process_steps.id"), nullable=True)
 
     category: Mapped[str] = mapped_column(String(80))
     sub_category: Mapped[str | None] = mapped_column(String(80), nullable=True)

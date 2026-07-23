@@ -38,7 +38,7 @@ def sample_metadata():
     return ProcessMetadata(
         process_name="Vendor Invoice Processing", team_name="Finance Operations",
         current_fte=6, current_volume=3200,
-        aht_minutes=22, lob="Shared Services Finance",
+        aht_minutes=22, lob="Shared Services Finance", annual_fte_cost=35000,
         pain_areas="High rework, manual 3-way match", compliance_requirements="SOX segregation of duties",
     )
 

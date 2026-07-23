@@ -87,14 +87,14 @@ def generate_excel_report(ctx: ReportContext) -> bytes:
             {
                 "Metric": [
                     "Total Recommendations", "Quick Wins", "Strategic Initiatives", "Estimated FTE Savings",
-                    "Estimated Annual Cost Savings ($)", "Blended Efficiency Improvement %",
-                    "Target Efficiency Range", "Assumption: Annual Cost / FTE ($)",
+                    "In-Year Savings ($)", "12-Month Savings ($)", "Blended Efficiency Improvement %",
+                    "Target Efficiency Range", "Annual FTE Cost - User Provided ($)", "Months Remaining in Year",
                 ],
                 "Value": [
                     s.get("total_recommendations"), s.get("quick_win_count"), s.get("strategic_count"),
-                    s.get("total_fte_savings"), s.get("total_annual_cost_savings"),
+                    s.get("total_fte_savings"), s.get("in_year_savings"), s.get("twelve_month_savings"),
                     s.get("blended_efficiency_improvement_pct"), s.get("target_efficiency_range_pct"),
-                    s.get("annual_cost_per_fte_assumption"),
+                    s.get("annual_fte_cost"), s.get("months_remaining_in_year"),
                 ],
             }
         )

@@ -8,9 +8,9 @@ def _make_ctx(sample_metadata, sample_diagnostics, sample_recommendation):
         metadata=sample_metadata, diagnostics=sample_diagnostics, recommendations=[sample_recommendation],
         savings_summary={
             "total_recommendations": 1, "quick_win_count": 1, "strategic_count": 0,
-            "total_fte_savings": 0.8, "total_annual_cost_savings": 28000,
+            "total_fte_savings": 0.8, "twelve_month_savings": 28000, "in_year_savings": 14000,
             "blended_efficiency_improvement_pct": 27.5, "target_efficiency_range_pct": "25-30%",
-            "annual_cost_per_fte_assumption": 35000,
+            "annual_fte_cost": 35000, "monthly_fte_cost": 2916.67, "months_remaining_in_year": 6,
         },
         executive_summary="Paragraph one.\n\nParagraph two with findings.",
         generated_at=dt.datetime.utcnow(),

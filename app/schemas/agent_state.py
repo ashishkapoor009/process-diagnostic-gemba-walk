@@ -27,6 +27,7 @@ class GembaWalkState(TypedDict, total=False):
 
     # Agent outputs
     diagnostics: Annotated[list[ProcessStepDiagnostic], _last_write]
+    future_diagnostics: Annotated[list[ProcessStepDiagnostic], _last_write]
     recommendations: Annotated[list[Recommendation], _last_write]
     flow_mermaid_current: Annotated[str, _last_write]
     flow_mermaid_future: Annotated[str, _last_write]

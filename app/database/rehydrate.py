@@ -34,7 +34,7 @@ def rehydrate_process_metadata(process) -> ProcessMetadata:
         process_name=process.process_name, team_name=process.team_name,
         current_fte=process.current_fte,
         current_volume=process.current_volume, aht_minutes=process.aht_minutes,
-        lob=process.lob, pain_areas=process.pain_areas,
+        lob=process.lob, annual_fte_cost=process.annual_fte_cost, pain_areas=process.pain_areas,
         customer_complaints=process.customer_complaints, dependencies=process.dependencies,
         current_sla=process.current_sla, known_risks=process.known_risks,
         applications_used=process.applications_used, systems_used=process.systems_used,
@@ -106,6 +106,7 @@ def load_report_context(process_id: int) -> ReportContext | None:
     return ReportContext(
         metadata=rehydrate_process_metadata(process),
         diagnostics=rehydrate_diagnostics(data["steps"]),
+        future_diagnostics=rehydrate_diagnostics(data.get("future_steps", [])),
         recommendations=rehydrate_recommendations(data["recommendations"]),
         savings_summary=process.savings_summary_json or {},
         executive_summary=process.executive_summary or "",

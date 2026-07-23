@@ -19,6 +19,7 @@ class ReportContext:
     executive_summary: str
     flow_mermaid_current: str = ""
     flow_mermaid_future: str = ""
+    future_diagnostics: list[ProcessStepDiagnostic] = field(default_factory=list)
     generated_at: dt.datetime = field(default_factory=dt.datetime.utcnow)
 
     @property

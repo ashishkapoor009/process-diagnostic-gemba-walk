@@ -75,8 +75,9 @@ def generate_ppt_report(ctx: ReportContext) -> bytes:
         [
             f"Current State: {ctx.metadata.current_fte} FTE | {ctx.metadata.current_volume} volume/period | {ctx.metadata.aht_minutes} min AHT",
             f"Recommendations Identified: {s.get('total_recommendations', 0)} ({s.get('quick_win_count', 0)} Quick Wins, {s.get('strategic_count', 0)} Strategic)",
-            f"Estimated FTE Savings: {s.get('total_fte_savings', 0)}",
-            f"Estimated Annual Cost Savings: ${s.get('total_annual_cost_savings', 0):,.0f}",
+            f"Estimated FTE Savings (Released): {s.get('total_fte_savings', 0)}",
+            f"In-Year Savings: ${s.get('in_year_savings', 0):,.0f}",
+            f"12-Month Savings (Full Run-Rate): ${s.get('twelve_month_savings', 0):,.0f}",
             f"Blended Efficiency Improvement: {s.get('blended_efficiency_improvement_pct', 0)}% (target {s.get('target_efficiency_range_pct', '25-30%')})",
         ],
     )

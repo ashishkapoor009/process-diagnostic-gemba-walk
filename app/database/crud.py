@@ -74,13 +74,19 @@ def create_process(project_id: Optional[int], metadata: ProcessMetadata) -> int:
         return process.id
 
 
-def save_diagnostics(process_id: int, diagnostics: list[ProcessStepDiagnostic]) -> None:
+def save_diagnostics(process_id: int, diagnostics: list[ProcessStepDiagnostic], state: str = "current") -> None:
+    """Persists the structured process map for one state slice ('current' or
+    'future'). Called twice per pipeline run so both the as-is and
+    post-improvement flows are stored as queryable rows, not just rendered
+    into Mermaid text.
+    """
     with session_scope() as db:
-        db.query(ProcessStep).filter(ProcessStep.process_id == process_id).delete()
+        db.query(ProcessStep).filter(ProcessStep.process_id == process_id, ProcessStep.state == state).delete()
         for d in diagnostics:
             db.add(
                 ProcessStep(
                     process_id=process_id,
+                    state=state,
                     step_number=d.step_number,
                     step_name=d.step_name,
                     purpose=d.purpose,
@@ -110,11 +116,21 @@ def save_diagnostics(process_id: int, diagnostics: list[ProcessStepDiagnostic]) 
 def save_recommendations(process_id: int, recommendations: list[RecommendationSchema]) -> None:
     with session_scope() as db:
         db.query(Recommendation).filter(Recommendation.process_id == process_id).delete()
+
+        # Map step_number -> current-state ProcessStep.id so every
+        # recommendation gets a proper FK link to its process map row,
+        # not just a loose step_number match.
+        current_steps = db.query(ProcessStep).filter(
+            ProcessStep.process_id == process_id, ProcessStep.state == "current"
+        ).all()
+        step_id_by_number = {s.step_number: s.id for s in current_steps}
+
         for r in recommendations:
             db.add(
                 Recommendation(
                     process_id=process_id,
                     step_number=r.step_number,
+                    process_step_id=step_id_by_number.get(r.step_number) if r.step_number else None,
                     category=r.category.value,
                     sub_category=r.sub_category.value if r.sub_category else None,
                     title=r.title,
@@ -263,17 +279,23 @@ def list_processes(project_id: Optional[int] = None) -> list[dict]:
         ]
 
 
-def get_process_full(process_id: int) -> dict:
+def get_process_full(process_id: int, step_state: str = "current") -> dict:
     with session_scope() as db:
         process = db.get(Process, process_id)
         if not process:
             return {}
-        steps = db.query(ProcessStep).filter(ProcessStep.process_id == process_id).order_by(ProcessStep.step_number).all()
+        steps = db.query(ProcessStep).filter(
+            ProcessStep.process_id == process_id, ProcessStep.state == step_state
+        ).order_by(ProcessStep.step_number).all()
+        future_steps = db.query(ProcessStep).filter(
+            ProcessStep.process_id == process_id, ProcessStep.state == "future"
+        ).order_by(ProcessStep.step_number).all()
         recs = db.query(Recommendation).filter(Recommendation.process_id == process_id).all()
         scores = db.query(EvaluationScore).filter(EvaluationScore.process_id == process_id).all()
         return {
             "process": process,
             "steps": steps,
+            "future_steps": future_steps,
             "recommendations": recs,
             "evaluation_scores": scores,
         }

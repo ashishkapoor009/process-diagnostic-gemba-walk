@@ -2,15 +2,25 @@
 per-recommendation savings with stated assumptions; this module performs
 the actual arithmetic roll-up so the headline efficiency number is
 reproducible and auditable rather than LLM-generated.
+
+Savings are reported two ways, both driven by the user-provided
+`annual_fte_cost` (no more hardcoded per-FTE cost assumption):
+
+- In-Year Savings: monthly FTE cost x months remaining in the current
+  calendar year x FTEs released. Reflects what actually lands in this
+  fiscal year's numbers if implementation starts now.
+- 12-Month Savings: annual FTE cost x FTEs released. The full annualized
+  run-rate savings once the recommendations are fully implemented.
 """
 from __future__ import annotations
+
+import datetime as dt
 
 from app.config.settings import get_settings
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import Recommendation
 
 PRODUCTIVE_MINUTES_PER_FTE_PER_MONTH = 9_000  # ~150 productive hours/month after shrinkage
-DEFAULT_ANNUAL_COST_PER_FTE = 35_000  # overridable per-engagement assumption
 
 
 def compute_current_state_baseline(metadata: ProcessMetadata, steps: list[ProcessStepDiagnostic]) -> dict:
@@ -29,16 +39,26 @@ def compute_current_state_baseline(metadata: ProcessMetadata, steps: list[Proces
     }
 
 
-def aggregate_savings(metadata: ProcessMetadata, recommendations: list[Recommendation],
-                        annual_cost_per_fte: float = DEFAULT_ANNUAL_COST_PER_FTE) -> dict:
+def months_remaining_in_calendar_year(as_of: dt.date | None = None) -> int:
+    """Months remaining in the current calendar year, counting the current
+    month as remaining (e.g. in July, that's Jul-Dec = 6 months)."""
+    today = as_of or dt.date.today()
+    return 13 - today.month
+
+
+def aggregate_savings(metadata: ProcessMetadata, recommendations: list[Recommendation]) -> dict:
     settings = get_settings()
 
     approved = [r for r in recommendations if r.reviewer_approved and not r.is_duplicate]
 
     total_fte_savings = sum(r.savings.fte_savings for r in approved)
-    total_annual_cost_savings = sum(r.savings.annual_cost_savings for r in approved) or (
-        total_fte_savings * annual_cost_per_fte
-    )
+
+    annual_fte_cost = metadata.annual_fte_cost
+    monthly_fte_cost = annual_fte_cost / 12
+    months_remaining = months_remaining_in_calendar_year()
+
+    in_year_savings = monthly_fte_cost * months_remaining * total_fte_savings
+    twelve_month_savings = annual_fte_cost * total_fte_savings
 
     # Blended % reduction: weight each recommendation's AHT reduction by its
     # own confidence score, then cap the aggregate to stay within a
@@ -71,11 +91,14 @@ def aggregate_savings(metadata: ProcessMetadata, recommendations: list[Recommend
         "quick_win_count": len(quick_wins),
         "strategic_count": len(strategic),
         "total_fte_savings": round(total_fte_savings, 2),
-        "total_annual_cost_savings": round(total_annual_cost_savings, 2),
+        "in_year_savings": round(in_year_savings, 2),
+        "twelve_month_savings": round(twelve_month_savings, 2),
+        "months_remaining_in_year": months_remaining,
+        "annual_fte_cost": annual_fte_cost,
+        "monthly_fte_cost": round(monthly_fte_cost, 2),
         "blended_efficiency_improvement_pct": round(calibrated_efficiency_pct, 1),
         "target_efficiency_range_pct": f"{target_low:.0f}-{target_high:.0f}%",
         "meets_target": target_low <= calibrated_efficiency_pct <= (target_high + 15),
         "recommendations_by_category": by_category,
-        "annual_cost_per_fte_assumption": annual_cost_per_fte,
         "productive_minutes_per_fte_per_month_assumption": PRODUCTIVE_MINUTES_PER_FTE_PER_MONTH,
     }

@@ -83,7 +83,10 @@ def node_flow_agent(state: GembaWalkState) -> dict:
     )
     trace = state.get("trace", [])
     trace.append(f"Process Flow Agent: future state has {len(future_steps)} steps. {notes[:200]}")
-    return {"flow_mermaid_current": current_mermaid, "flow_mermaid_future": future_mermaid, "trace": trace}
+    return {
+        "flow_mermaid_current": current_mermaid, "flow_mermaid_future": future_mermaid,
+        "future_diagnostics": future_steps, "trace": trace,
+    }
 
 
 def node_review_agent(state: GembaWalkState) -> dict:
@@ -161,8 +164,10 @@ Top Lean wastes observed: {top_wastes}.
 {len(recommendations)} recommendations identified ({savings['quick_win_count']} quick wins,
 {savings['strategic_count']} strategic). Estimated blended efficiency improvement:
 {savings['blended_efficiency_improvement_pct']}% (target range {savings['target_efficiency_range_pct']}).
-Estimated FTE savings: {savings['total_fte_savings']}. Estimated annual cost savings:
-${savings['total_annual_cost_savings']:,.0f} (assumption: ${savings['annual_cost_per_fte_assumption']:,.0f}/FTE/year).
+Estimated FTE savings (FTEs released): {savings['total_fte_savings']}.
+In-Year savings: ${savings['in_year_savings']:,.0f} (based on {savings['months_remaining_in_year']} months
+remaining in the calendar year). 12-Month (full run-rate) savings: ${savings['twelve_month_savings']:,.0f}
+(annual FTE cost provided by the user: ${savings['annual_fte_cost']:,.0f}/FTE/year).
 
 Top quick wins: {[q.title for q in quick_wins]}
 

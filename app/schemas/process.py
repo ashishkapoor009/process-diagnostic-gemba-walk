@@ -21,6 +21,7 @@ class ProcessMetadata(BaseModel):
     current_volume: float = Field(..., gt=0, description="Transactions handled per period (e.g. per month)")
     aht_minutes: float = Field(..., gt=0, description="Average Handle Time in minutes")
     lob: str = Field(..., min_length=2, max_length=120, description="Line of Business")
+    annual_fte_cost: float = Field(..., gt=0, description="Fully-loaded annual cost per FTE, in the team's local currency")
 
     # Optional
     pain_areas: Optional[str] = None
