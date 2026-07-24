@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from app.agents.react_utils import react_and_structure
 from app.agents.tools import default_tools
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
-from app.schemas.recommendation import Recommendation
+from app.schemas.recommendation import Recommendation, RecommendationDraft, promote_draft
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -52,12 +52,16 @@ your own reasoning, or both, and set confidence_score accordingly.
 
 STRUCTURING_INSTRUCTION = (
     "Produce one Recommendation per distinct automation opportunity identified, "
-    "each tagged with the correct step_number. proposed_by_agent must be 'Automation Agent'."
+    "each tagged with the correct step_number. "
+    "problem_statement must state the SPECIFIC problem/pain point at that step this "
+    "recommendation resolves (e.g. 'Analyst manually re-keys data from Email into "
+    "Sonata, taking 3 min/txn with a 4% error rate'), distinct from the description "
+    "of the fix itself."
 )
 
 
 class _RecList(BaseModel):
-    recommendations: list[Recommendation] = Field(default_factory=list)
+    recommendations: list[RecommendationDraft] = Field(default_factory=list)
 
 
 def run_automation_agent(metadata: ProcessMetadata, diagnostics: list[ProcessStepDiagnostic]) -> tuple[list[Recommendation], str]:
@@ -84,7 +88,6 @@ def run_automation_agent(metadata: ProcessMetadata, diagnostics: list[ProcessSte
     result, raw_answer = react_and_structure(
         SYSTEM_PROMPT, user_message, tools, _RecList, STRUCTURING_INSTRUCTION, temperature=0.3
     )
-    for r in result.recommendations:
-        r.proposed_by_agent = "Automation Agent"
-    logger.info(f"Automation Agent produced {len(result.recommendations)} recommendations")
-    return result.recommendations, raw_answer
+    recommendations = [promote_draft(d, "Automation Agent") for d in result.recommendations]
+    logger.info(f"Automation Agent produced {len(recommendations)} recommendations")
+    return recommendations, raw_answer

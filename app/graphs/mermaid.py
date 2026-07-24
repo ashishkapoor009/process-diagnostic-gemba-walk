@@ -1,9 +1,9 @@
 """Renders process step diagnostics as Mermaid diagrams: a flowchart (for
 the future-state / simple views) and a swimlane-style flow keyed by owner
 (for the current-state BPMN-style view), plus a Value Stream Map lane
-showing VA vs NVA/wait time. Mermaid text is rendered natively by
-Streamlit (via st.markdown with mermaid support / streamlit-mermaid) and
-is portable into Visio/Lucidchart/draw.io.
+showing VA vs NVA/wait time. Mermaid text is rendered client-side by the
+Next.js frontend (via the mermaid npm package) and is portable into
+Visio/Lucidchart/draw.io.
 """
 from __future__ import annotations
 
@@ -72,6 +72,12 @@ def render_swimlane(steps: list[ProcessStepDiagnostic], title: str = "Process Fl
         lane_id = f"lane{lane_idx}"
         safe_owner = _sanitize_label(owner, 40)
         lines.append(f'    subgraph {lane_id} ["{safe_owner}"]')
+        # Mermaid subgraphs default to their OWN internal layout direction,
+        # independent of the outer flowchart's "TD" - without this, a
+        # single-lane chain (the common case when every step shares one
+        # owner) renders as one long horizontal row instead of stacking
+        # top-to-bottom, which is unreadable for anything past ~4 steps.
+        lines.append("        direction TB")
         for s in lane_steps:
             node = _safe_id("S", s.step_number)
             label = _sanitize_label(f"{s.step_number}. {s.step_name}")

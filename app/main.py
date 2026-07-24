@@ -1,8 +1,7 @@
-"""Optional FastAPI backend service layer.
+"""FastAPI backend service layer.
 
-Exposes the same multi-agent diagnostic pipeline as a REST API so a
-separately hosted frontend (e.g. a Next.js app on Vercel) can drive this
-tool without embedding Streamlit. Run with:
+Exposes the multi-agent diagnostic pipeline as a REST API consumed by the
+Next.js frontend. Run with:
     uvicorn app.main:api --host 0.0.0.0 --port 8000
 """
 from __future__ import annotations
@@ -27,9 +26,15 @@ from app.extraction.step_extractor import extract_steps_from_text
 from app.reports.excel import generate_excel_report
 from app.reports.pdf import generate_pdf_report
 from app.reports.ppt import generate_ppt_report
+from app.reports.standalone_exports import (
+    generate_golden_dataset_excel,
+    generate_golden_dataset_ppt,
+    generate_recommendations_excel,
+    generate_recommendations_ppt,
+)
 from app.reports.word import generate_word_report
-from app.schemas.process import ProcessMetadata, ProcessStepInput
-from app.ui.pipeline_runner import run_and_persist_pipeline
+from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic, ProcessStepInput
+from app.services.pipeline_runner import run_and_persist_pipeline, update_current_state_diagnostics
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -194,12 +199,33 @@ def get_process(process_id: int) -> dict:
     return {
         "metadata": ctx.metadata.model_dump(),
         "diagnostics": [d.model_dump() for d in ctx.diagnostics],
+        "future_diagnostics": [d.model_dump() for d in ctx.future_diagnostics],
         "recommendations": [r.model_dump() for r in ctx.recommendations],
         "savings_summary": ctx.savings_summary,
+        "kpi_summary": ctx.kpi_summary,
         "executive_summary": ctx.executive_summary,
         "flow_mermaid_current": ctx.flow_mermaid_current,
         "flow_mermaid_future": ctx.flow_mermaid_future,
+        "evaluation_scores": ctx.evaluation_scores,
+        "deep_eval_findings": [f.model_dump() for f in ctx.deep_eval_findings],
     }
+
+
+class UpdateStepsRequest(BaseModel):
+    diagnostics: list[ProcessStepDiagnostic]
+
+
+@api.patch("/api/processes/{process_id}/steps")
+def update_process_steps(process_id: int, payload: UpdateStepsRequest) -> dict:
+    """User-editable correction to the current-state diagnostics table -
+    optional, does not re-run the LLM pipeline. See
+    update_current_state_diagnostics for exactly what does and doesn't
+    recompute.
+    """
+    try:
+        return update_current_state_diagnostics(process_id, payload.diagnostics)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 _REPORT_GENERATORS = {
@@ -219,3 +245,42 @@ def download_report(process_id: int, fmt: Literal["pdf", "word", "excel", "ppt"]
     content = generator(ctx)
     filename = f"{ctx.metadata.process_name}_GembaWalk.{ext}"
     return Response(content=content, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+_RECOMMENDATIONS_GENERATORS = {
+    "excel": (generate_recommendations_excel, _XLSX_MIME, "xlsx"),
+    "ppt": (generate_recommendations_ppt, _PPTX_MIME, "pptx"),
+}
+
+
+@api.get("/api/processes/{process_id}/recommendations/{fmt}")
+def download_recommendations(process_id: int, fmt: Literal["excel", "ppt"]) -> Response:
+    """Standalone recommendations table (mapped to process steps, with
+    problem statements) - independent of the full report bundle above.
+    """
+    ctx = load_report_context(process_id)
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="Process not found.")
+    generator, mime, ext = _RECOMMENDATIONS_GENERATORS[fmt]
+    content = generator(ctx)
+    filename = f"{ctx.metadata.process_name}_Recommendations.{ext}"
+    return Response(content=content, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+_GOLDEN_DATASET_GENERATORS = {
+    "excel": (generate_golden_dataset_excel, _XLSX_MIME, "xlsx"),
+    "ppt": (generate_golden_dataset_ppt, _PPTX_MIME, "pptx"),
+}
+
+
+@api.get("/api/golden-dataset/{fmt}")
+def download_golden_dataset(fmt: Literal["excel", "ppt"]) -> Response:
+    """The reference benchmark dataset the KPI engine compares every
+    diagnostic against - downloadable standalone, independent of any process.
+    """
+    generator, mime, ext = _GOLDEN_DATASET_GENERATORS[fmt]
+    content = generator()
+    return Response(content=content, media_type=mime, headers={"Content-Disposition": f'attachment; filename="Golden_Benchmark_Dataset.{ext}"'})

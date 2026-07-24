@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
+from app.schemas.evaluation import DeepEvalFinding
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import Recommendation
 
@@ -20,6 +21,11 @@ class ReportContext:
     flow_mermaid_current: str = ""
     flow_mermaid_future: str = ""
     future_diagnostics: list[ProcessStepDiagnostic] = field(default_factory=list)
+    kpi_summary: dict = field(default_factory=dict)
+    # Each dict: round_number, faithfulness, answer_relevancy, context_precision,
+    # context_recall, context_relevancy, overall_score, passed_threshold.
+    evaluation_scores: list[dict] = field(default_factory=list)
+    deep_eval_findings: list[DeepEvalFinding] = field(default_factory=list)
     generated_at: dt.datetime = field(default_factory=dt.datetime.utcnow)
 
     @property

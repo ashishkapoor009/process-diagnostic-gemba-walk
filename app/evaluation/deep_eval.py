@@ -10,18 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.schemas.evaluation import DeepEvalFinding
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import Recommendation
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class DeepEvalFinding:
-    severity: str  # "error" (auto-corrected) | "warning" (flagged only)
-    recommendation_title: str
-    issue: str
 
 
 @dataclass
@@ -35,7 +29,8 @@ class DeepEvalResult:
 
 
 def deep_evaluate_recommendations(
-    metadata: ProcessMetadata, diagnostics: list[ProcessStepDiagnostic], recommendations: list[Recommendation]
+    metadata: ProcessMetadata, diagnostics: list[ProcessStepDiagnostic], recommendations: list[Recommendation],
+    round_number: int = 1,
 ) -> DeepEvalResult:
     result = DeepEvalResult()
     valid_step_numbers = {d.step_number for d in diagnostics}
@@ -51,7 +46,7 @@ def deep_evaluate_recommendations(
             result.corrections_applied += 1
             result.findings.append(
                 DeepEvalFinding(
-                    severity="error", recommendation_title=r.title,
+                    severity="error", recommendation_title=r.title, round_number=round_number,
                     issue=(
                         f"FTE savings ({original}) exceeded total process FTE ({metadata.current_fte}); "
                         f"capped to {r.savings.fte_savings}."
@@ -70,7 +65,7 @@ def deep_evaluate_recommendations(
         result.corrections_applied += 1
         result.findings.append(
             DeepEvalFinding(
-                severity="error", recommendation_title="(aggregate)",
+                severity="error", recommendation_title="(aggregate)", round_number=round_number,
                 issue=(
                     f"Sum of FTE savings across {len(active_recs)} recommendations ({total_fte_savings:.2f}) "
                     f"exceeded total process FTE ({metadata.current_fte}); scaled down by {scale:.2f}x."
@@ -85,7 +80,7 @@ def deep_evaluate_recommendations(
         if r.step_number is not None and r.step_number not in valid_step_numbers:
             result.findings.append(
                 DeepEvalFinding(
-                    severity="warning", recommendation_title=r.title,
+                    severity="warning", recommendation_title=r.title, round_number=round_number,
                     issue=f"References step {r.step_number}, which doesn't exist in this process's diagnosed steps.",
                 )
             )
@@ -96,7 +91,7 @@ def deep_evaluate_recommendations(
         if r.source_type.value == "LLM Reasoning" and r.confidence_score > 0.9:
             result.findings.append(
                 DeepEvalFinding(
-                    severity="warning", recommendation_title=r.title,
+                    severity="warning", recommendation_title=r.title, round_number=round_number,
                     issue=f"Confidence {r.confidence_score:.0%} with no retrieved-knowledge grounding (LLM reasoning only).",
                 )
             )

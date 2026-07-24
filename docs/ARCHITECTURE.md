@@ -5,8 +5,7 @@
 ```mermaid
 flowchart TB
     subgraph Client["Client Layer"]
-        UI["Streamlit UI\n(pages/1-7)"]
-        EXT["External Frontend\n(optional, e.g. Next.js on Vercel)"]
+        EXT["Next.js Frontend\n(Vercel)"]
     end
 
     subgraph API["Service Layer"]
@@ -46,9 +45,8 @@ flowchart TB
         PPT["python-pptx"]
     end
 
-    UI --> PIPE
     EXT --> FASTAPI --> PIPE
-    UI --> PARSE --> OCR
+    FASTAPI --> PARSE --> OCR
     PARSE --> LLMX --> PIPE
 
     PIPE --> PE --> AUTO --> AI --> KAI --> FLOW --> REV --> RAGAS
@@ -64,17 +62,16 @@ flowchart TB
     KB --> CHROMA
 
     PIPE --> SQLITE
-    UI --> Reports
     FASTAPI --> Reports
     Reports --> SQLITE
 ```
 
 ## Layers
 
-1. **Client Layer** - Streamlit multipage UI (primary) and/or any external
-   frontend (e.g. a Next.js app on Vercel) that talks to the FastAPI backend.
-2. **Service Layer** - optional FastAPI REST API (`app/main.py`) exposing
-   the same pipeline for non-Streamlit consumers.
+1. **Client Layer** - the Next.js frontend (`process-diagnostic-frontend`,
+   deployed to Vercel) that talks to the FastAPI backend.
+2. **Service Layer** - the FastAPI REST API (`app/main.py`) exposing the
+   pipeline to the frontend.
 3. **Orchestration Layer** - a LangGraph `StateGraph` (`app/agents/orchestrator.py`)
    sequencing six ReAct agents, with a conditional edge that loops back to
    the Kaizen Agent when RAGAS scores fall below threshold.

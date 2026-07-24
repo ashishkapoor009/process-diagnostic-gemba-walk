@@ -17,6 +17,7 @@ from app.schemas.enums import (
     SourceType,
     ValueClassification,
 )
+from app.schemas.evaluation import DeepEvalFinding
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import PrioritizationScore, Recommendation, SavingsEstimate
 from app.reports.report_data import ReportContext
@@ -75,7 +76,8 @@ def rehydrate_recommendations(recs) -> list[Recommendation]:
                 id=r.id, step_number=r.step_number,
                 category=_enum_or(ImprovementCategory, r.category, ImprovementCategory.PROCESS_SIMPLIFICATION),
                 sub_category=_enum_or(AutomationTool, r.sub_category, None) if r.sub_category else None,
-                title=r.title, description=r.description, rationale=r.rationale or "",
+                title=r.title, description=r.description, problem_statement=r.problem_statement or "",
+                rationale=r.rationale or "",
                 proposed_by_agent=r.proposed_by_agent,
                 roadmap_horizon=_enum_or(RoadmapHorizon, r.roadmap_horizon, RoadmapHorizon.DAYS_60),
                 complexity=_enum_or(ComplexityLevel, r.complexity, ComplexityLevel.MEDIUM),
@@ -98,6 +100,32 @@ def rehydrate_recommendations(recs) -> list[Recommendation]:
     return result
 
 
+def rehydrate_evaluation_scores(scores) -> list[dict]:
+    return [
+        {
+            "round_number": s.round_number,
+            "faithfulness": s.faithfulness,
+            "answer_relevancy": s.answer_relevancy,
+            "context_precision": s.context_precision,
+            "context_recall": s.context_recall,
+            "context_relevancy": s.context_relevancy,
+            "overall_score": s.overall_score,
+            "passed_threshold": s.passed_threshold,
+        }
+        for s in scores
+    ]
+
+
+def rehydrate_deep_eval_findings(findings) -> list[DeepEvalFinding]:
+    return [
+        DeepEvalFinding(
+            severity=f.severity, recommendation_title=f.recommendation_title,
+            issue=f.issue, round_number=f.round_number,
+        )
+        for f in findings
+    ]
+
+
 def load_report_context(process_id: int) -> ReportContext | None:
     data = get_process_full(process_id)
     process = data.get("process")
@@ -109,8 +137,11 @@ def load_report_context(process_id: int) -> ReportContext | None:
         future_diagnostics=rehydrate_diagnostics(data.get("future_steps", [])),
         recommendations=rehydrate_recommendations(data["recommendations"]),
         savings_summary=process.savings_summary_json or {},
+        kpi_summary=process.kpi_summary_json or {},
         executive_summary=process.executive_summary or "",
         flow_mermaid_current=process.flow_mermaid_current or "",
         flow_mermaid_future=process.flow_mermaid_future or "",
+        evaluation_scores=rehydrate_evaluation_scores(data.get("evaluation_scores", [])),
+        deep_eval_findings=rehydrate_deep_eval_findings(data.get("deep_eval_findings", [])),
         generated_at=process.updated_at,
     )

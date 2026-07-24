@@ -31,6 +31,19 @@ class RagasScore(BaseModel):
         return self.overall >= threshold
 
 
+class DeepEvalFinding(BaseModel):
+    """One deterministic grounding/numeric-sanity finding from the deep
+    evaluation layer (app/evaluation/deep_eval.py) - RAGAS's complement,
+    catching errors a narrative-answer judge can't (e.g. FTE savings that
+    exceed the process's total headcount).
+    """
+
+    severity: str = "warning"  # "error" (auto-corrected) | "warning" (flagged only)
+    recommendation_title: str
+    issue: str
+    round_number: int = 1
+
+
 class AgentReviewNote(BaseModel):
     agent_output_id: str
     reviewer_agent: str = "Reviewer Agent"

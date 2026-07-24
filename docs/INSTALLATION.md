@@ -4,16 +4,16 @@
 
 - Python 3.11 or 3.12
 - Tesseract OCR engine (system package, not just the `pytesseract` Python wrapper)
-- Graphviz (system package) for diagram rendering
 - An OpenAI API key, or an Azure OpenAI resource with a chat + embedding deployment
+- Node.js 18+ (only if you're also running the `process-diagnostic-frontend` Next.js app locally)
 
-### Installing Tesseract & Graphviz
+### Installing Tesseract
 
-| OS | Tesseract | Graphviz |
-|----|-----------|----------|
-| Windows | [UB-Mannheim Tesseract installer](https://github.com/UB-Mannheim/tesseract/wiki), then set `TESSERACT_CMD` in `.env` to the install path | `choco install graphviz` or [graphviz.org download](https://graphviz.org/download/) |
-| macOS | `brew install tesseract` | `brew install graphviz` |
-| Ubuntu/Debian | `sudo apt install tesseract-ocr` | `sudo apt install graphviz` |
+| OS | Command |
+|----|---------|
+| Windows | [UB-Mannheim Tesseract installer](https://github.com/UB-Mannheim/tesseract/wiki), then set `TESSERACT_CMD` in `.env` to the install path |
+| macOS | `brew install tesseract` |
+| Ubuntu/Debian | `sudo apt install tesseract-ocr` |
 
 ## Local Setup
 
@@ -34,17 +34,23 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env: set OPENAI_API_KEY (or the AZURE_OPENAI_* variables)
 
-# 4. Run the Streamlit app
-streamlit run streamlit_app.py
-```
-The app opens at `http://localhost:8501`.
-
-## Running the Optional FastAPI Backend
-
-```bash
+# 4. Run the FastAPI backend
 uvicorn app.main:api --host 0.0.0.0 --port 8000 --reload
 ```
 API docs at `http://localhost:8000/docs`.
+
+## Running the Frontend
+
+The UI lives in the sibling `process-diagnostic-frontend` repo (Next.js):
+
+```bash
+cd ../process-diagnostic-frontend
+npm install
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+npm run dev
+```
+The app opens at `http://localhost:3000` (or the port you choose) and talks
+to the backend started above.
 
 ## Running Tests
 
@@ -63,21 +69,22 @@ without any API key.
 ```bash
 docker compose up --build
 ```
-This starts both the Streamlit UI (port 8501) and the FastAPI backend (port
-8000), sharing the same `data/` volume (SQLite DB + ChromaDB persistence).
+This starts the FastAPI backend on port 8000, persisting the SQLite DB and
+ChromaDB collection under the `data/` volume. Run the frontend separately
+(locally via `npm run dev`, or deployed to Vercel) pointed at this backend.
 
 ## First Run: Knowledge Base Ingestion
 
 On first use of any RAG-dependent feature (running a diagnostic, or the
-Knowledge Base search page), the app automatically chunks and embeds the
-Markdown knowledge base in `app/rag/knowledge_base/` into a local ChromaDB
-collection under `data/chroma/`. This requires a working embeddings API call,
-so `OPENAI_API_KEY` (or Azure equivalent) must be set before first use.
-Subsequent runs reuse the persisted collection instantly.
+`/api/knowledge-base` search endpoint), the app automatically chunks and
+embeds the Markdown knowledge base in `app/rag/knowledge_base/` into a
+local ChromaDB collection under `data/chroma/`. This requires a working
+embeddings API call, so `OPENAI_API_KEY` (or Azure equivalent) must be set
+before first use. Subsequent runs reuse the persisted collection instantly.
 
 ## Troubleshooting
 
-- **"No LLM credentials configured"** - set `OPENAI_API_KEY` in `.env` and restart the app (Streamlit doesn't hot-reload `.env` changes).
+- **"No LLM credentials configured"** - set `OPENAI_API_KEY` in `.env` and restart the backend process.
 - **OCR returns empty text** - confirm Tesseract is installed and on PATH, or set `TESSERACT_CMD` explicitly in `.env`.
-- **Mermaid diagrams don't render** - they load `mermaid.js` from a CDN inside an embedded HTML component; ensure the machine running the browser has internet access.
+- **Mermaid diagrams don't render on the frontend** - the frontend renders them client-side via the `mermaid` npm package; check the browser console for errors and confirm the backend's `flow_mermaid_current`/`flow_mermaid_future` fields are non-empty.
 - **`unstructured` fallback errors on an unusual file** - this only triggers for formats not natively handled (e.g. legacy `.doc`, `.vsdx`); prefer PDF/DOCX/PPTX/PNG/JPG/CSV/XLSX/BPMN-XML exports where possible.

@@ -1,4 +1,0 @@
-tesseract-ocr
-graphviz
-libgl1
-poppler-utils

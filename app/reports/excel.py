@@ -60,7 +60,7 @@ def generate_excel_report(ctx: ReportContext) -> bytes:
                     "Sub-Category": sub_category_label(r.category),
                     "Improvement Category": r.category.value,
                     "Automation Tool": r.sub_category.value if r.sub_category else "",
-                    "Title": r.title, "Description": r.description,
+                    "Title": r.title, "Problem Statement": r.problem_statement, "Description": r.description,
                     "Efficiency Plan": efficiency_plan_for_category(r.category),
                     "Proposed By": r.proposed_by_agent,
                     "Horizon": r.roadmap_horizon.value, "Business Impact": r.prioritization.business_impact,

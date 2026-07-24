@@ -1,6 +1,6 @@
 """Thin, typed CRUD helpers over the SQLAlchemy models. Every function opens
-and closes its own session so callers (Streamlit pages, FastAPI routes,
-LangGraph nodes) never have to manage session lifecycle themselves.
+and closes its own session so callers (FastAPI routes, LangGraph nodes)
+never have to manage session lifecycle themselves.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import Iterator, Optional
 from app.database.models import (
     AgentResponse,
     AuditLog,
+    DeepEvalFinding as DeepEvalFindingRow,
     EvaluationScore,
     Feedback,
     Process,
@@ -22,7 +23,7 @@ from app.database.models import (
     get_session_factory,
     init_db,
 )
-from app.schemas.evaluation import RagasScore
+from app.schemas.evaluation import DeepEvalFinding, RagasScore
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import Recommendation as RecommendationSchema
 from app.utils.logging import get_logger
@@ -79,38 +80,50 @@ def save_diagnostics(process_id: int, diagnostics: list[ProcessStepDiagnostic], 
     'future'). Called twice per pipeline run so both the as-is and
     post-improvement flows are stored as queryable rows, not just rendered
     into Mermaid text.
+
+    Upserts by step_number rather than delete-then-insert, so a ProcessStep
+    row's id is stable across an edit (see update_current_state_diagnostics)
+    - Recommendation.process_step_id FKs stay valid instead of pointing at
+    rows a delete-then-insert would have orphaned.
     """
     with session_scope() as db:
-        db.query(ProcessStep).filter(ProcessStep.process_id == process_id, ProcessStep.state == state).delete()
+        existing = db.query(ProcessStep).filter(
+            ProcessStep.process_id == process_id, ProcessStep.state == state
+        ).all()
+        existing_by_number = {s.step_number: s for s in existing}
+        seen_numbers = set()
+
         for d in diagnostics:
-            db.add(
-                ProcessStep(
-                    process_id=process_id,
-                    state=state,
-                    step_number=d.step_number,
-                    step_name=d.step_name,
-                    purpose=d.purpose,
-                    owner=d.owner,
-                    input_data=d.input_data,
-                    output_data=d.output_data,
-                    system_used=d.system_used,
-                    is_decision=d.is_decision,
-                    cycle_time_minutes=d.cycle_time_minutes,
-                    touch_time_minutes=d.touch_time_minutes,
-                    wait_time_minutes=d.wait_time_minutes,
-                    value_classification=d.value_classification.value,
-                    business_risk=d.business_risk.value,
-                    customer_impact=d.customer_impact.value,
-                    compliance_risk=d.compliance_risk.value,
-                    lean_wastes_json=[w.value for w in d.lean_wastes],
-                    root_cause=d.root_cause,
-                    automation_score=d.automation_score,
-                    ai_readiness_score=d.ai_readiness_score,
-                    complexity_score=d.complexity_score,
-                    implementation_effort_days=d.implementation_effort_days,
-                    savings_potential_pct=d.savings_potential_pct,
-                )
-            )
+            seen_numbers.add(d.step_number)
+            row = existing_by_number.get(d.step_number)
+            if row is None:
+                row = ProcessStep(process_id=process_id, state=state, step_number=d.step_number)
+                db.add(row)
+            row.step_name = d.step_name
+            row.purpose = d.purpose
+            row.owner = d.owner
+            row.input_data = d.input_data
+            row.output_data = d.output_data
+            row.system_used = d.system_used
+            row.is_decision = d.is_decision
+            row.cycle_time_minutes = d.cycle_time_minutes
+            row.touch_time_minutes = d.touch_time_minutes
+            row.wait_time_minutes = d.wait_time_minutes
+            row.value_classification = d.value_classification.value
+            row.business_risk = d.business_risk.value
+            row.customer_impact = d.customer_impact.value
+            row.compliance_risk = d.compliance_risk.value
+            row.lean_wastes_json = [w.value for w in d.lean_wastes]
+            row.root_cause = d.root_cause
+            row.automation_score = d.automation_score
+            row.ai_readiness_score = d.ai_readiness_score
+            row.complexity_score = d.complexity_score
+            row.implementation_effort_days = d.implementation_effort_days
+            row.savings_potential_pct = d.savings_potential_pct
+
+        for number, row in existing_by_number.items():
+            if number not in seen_numbers:
+                db.delete(row)
 
 
 def save_recommendations(process_id: int, recommendations: list[RecommendationSchema]) -> None:
@@ -135,6 +148,7 @@ def save_recommendations(process_id: int, recommendations: list[RecommendationSc
                     sub_category=r.sub_category.value if r.sub_category else None,
                     title=r.title,
                     description=r.description,
+                    problem_statement=r.problem_statement,
                     rationale=r.rationale,
                     proposed_by_agent=r.proposed_by_agent,
                     roadmap_horizon=r.roadmap_horizon.value,
@@ -196,6 +210,21 @@ def save_evaluation_score(process_id: int, ragas: RagasScore, threshold: float,
         )
 
 
+def save_deep_eval_findings(process_id: int, findings: list[DeepEvalFinding]) -> None:
+    with session_scope() as db:
+        db.query(DeepEvalFindingRow).filter(DeepEvalFindingRow.process_id == process_id).delete()
+        for f in findings:
+            db.add(
+                DeepEvalFindingRow(
+                    process_id=process_id,
+                    severity=f.severity,
+                    recommendation_title=f.recommendation_title,
+                    issue=f.issue,
+                    round_number=f.round_number,
+                )
+            )
+
+
 def save_flow_diagrams(process_id: int, current_mermaid: str, future_mermaid: str) -> None:
     with session_scope() as db:
         process = db.get(Process, process_id)
@@ -204,12 +233,14 @@ def save_flow_diagrams(process_id: int, current_mermaid: str, future_mermaid: st
             process.flow_mermaid_future = future_mermaid
 
 
-def save_executive_summary(process_id: int, summary: str, savings_summary: dict) -> None:
+def save_executive_summary(process_id: int, summary: str, savings_summary: dict, kpi_summary: dict | None = None) -> None:
     with session_scope() as db:
         process = db.get(Process, process_id)
         if process:
             process.executive_summary = summary
             process.savings_summary_json = savings_summary
+            if kpi_summary is not None:
+                process.kpi_summary_json = kpi_summary
 
 
 def log_rag_query(process_id: Optional[int], query: str, doc_ids: list[str], top_k: int) -> None:
@@ -291,11 +322,17 @@ def get_process_full(process_id: int, step_state: str = "current") -> dict:
             ProcessStep.process_id == process_id, ProcessStep.state == "future"
         ).order_by(ProcessStep.step_number).all()
         recs = db.query(Recommendation).filter(Recommendation.process_id == process_id).all()
-        scores = db.query(EvaluationScore).filter(EvaluationScore.process_id == process_id).all()
+        scores = db.query(EvaluationScore).filter(EvaluationScore.process_id == process_id).order_by(
+            EvaluationScore.round_number
+        ).all()
+        deep_findings = db.query(DeepEvalFindingRow).filter(DeepEvalFindingRow.process_id == process_id).order_by(
+            DeepEvalFindingRow.round_number
+        ).all()
         return {
             "process": process,
             "steps": steps,
             "future_steps": future_steps,
             "recommendations": recs,
             "evaluation_scores": scores,
+            "deep_eval_findings": deep_findings,
         }

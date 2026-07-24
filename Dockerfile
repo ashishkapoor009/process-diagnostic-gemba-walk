@@ -4,10 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# System deps: tesseract for OCR, graphviz for diagram rendering, poppler for pdf2image
+# System deps: tesseract for OCR, poppler for pdf2image
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
-    graphviz \
     libgl1 \
     poppler-utils \
     build-essential \
@@ -23,8 +22,6 @@ COPY . .
 
 RUN mkdir -p data/chroma data/uploads logs
 
-EXPOSE 8501 8000
+EXPOSE 8000
 
-# Default: run the Streamlit UI. Override CMD to run the FastAPI backend instead:
-#   docker run ... uvicorn app.main:api --host 0.0.0.0 --port 8000
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["uvicorn", "app.main:api", "--host", "0.0.0.0", "--port", "8000"]

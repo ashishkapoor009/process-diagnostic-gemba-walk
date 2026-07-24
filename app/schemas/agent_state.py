@@ -8,7 +8,7 @@ from typing import Annotated, Any, Optional
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-from app.schemas.evaluation import AgentReviewNote, RagasScore
+from app.schemas.evaluation import AgentReviewNote, DeepEvalFinding, RagasScore
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic, ProcessStepInput
 from app.schemas.recommendation import Recommendation
 
@@ -47,10 +47,12 @@ class GembaWalkState(TypedDict, total=False):
     # Review / evaluation loop
     review_notes: Annotated[list[AgentReviewNote], _last_write]
     ragas_scores: Annotated[list[RagasScore], _last_write]
+    deep_eval_findings: Annotated[list[DeepEvalFinding], _extend_list]
     review_round: int
     needs_revision: bool
 
     # Aggregated results
     executive_summary: Annotated[str, _last_write]
     savings_summary: Annotated[dict, _last_write]
+    kpi_summary: Annotated[dict, _last_write]
     trace: Annotated[list[str], _extend_list]

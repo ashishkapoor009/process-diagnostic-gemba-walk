@@ -46,11 +46,11 @@ PDF/Word/Excel/PowerPoint reports.
 
 ## Tech Stack
 
-Python 3.11/3.12 · Streamlit · LangGraph · LangChain · ReAct agent
-architecture · SQLite (SQLAlchemy) · ChromaDB (vector store) · RAGAS ·
-Pydantic · FastAPI (optional backend) · NetworkX · Mermaid · Graphviz ·
-Pandas · Plotly · python-docx · ReportLab · Pillow/OpenCV · Tesseract OCR ·
-Unstructured.io · PyMuPDF · pdfplumber · OpenAI / Azure OpenAI compatible models.
+Python 3.11/3.12 · FastAPI backend · Next.js frontend · LangGraph ·
+LangChain · ReAct agent architecture · SQLite (SQLAlchemy) · ChromaDB
+(vector store) · RAGAS · Pydantic · NetworkX · Mermaid · Pandas ·
+python-docx · ReportLab · Pillow/OpenCV · Tesseract OCR · PyMuPDF ·
+pdfplumber · OpenAI / Azure OpenAI compatible models.
 
 ## Quick Start
 
@@ -58,9 +58,11 @@ Unstructured.io · PyMuPDF · pdfplumber · OpenAI / Azure OpenAI compatible mod
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env   # then set OPENAI_API_KEY
-streamlit run streamlit_app.py
+uvicorn app.main:api --host 0.0.0.0 --port 8000
 ```
-Full setup (including Tesseract/Graphviz system packages) is in
+This starts the FastAPI backend. Point the companion Next.js frontend
+(`process-diagnostic-frontend`) at it via `NEXT_PUBLIC_API_URL`. Full setup
+(including Tesseract system packages) is in
 [`docs/INSTALLATION.md`](docs/INSTALLATION.md). Try it instantly with the
 sample process in [`sample_data/`](sample_data/).
 
@@ -73,22 +75,23 @@ process-excellence-agent/
 │   ├── rag/              # Knowledge base, ChromaDB vector store, retriever
 │   ├── database/         # SQLAlchemy models, CRUD, DB->Pydantic rehydration
 │   ├── extraction/       # Document parsing, OCR, LLM step extraction
-│   ├── evaluation/       # RAGAS integration
-│   ├── graphs/           # Mermaid, NetworkX, Plotly visualizations
+│   ├── evaluation/       # RAGAS + deep evaluation integration
+│   ├── graphs/           # Mermaid, NetworkX visualizations
 │   ├── reports/          # PDF/Word/Excel/PPT generators
 │   ├── schemas/          # Pydantic models (process, recommendation, evaluation, LangGraph state)
-│   ├── ui/               # Streamlit styling, Mermaid rendering, pipeline runner
+│   ├── services/          # Pipeline runner (orchestrator -> persistence bridge)
 │   ├── config/           # Settings (pydantic-settings), LLM factory
 │   ├── utils/             # Logging, retry, caching
-│   └── main.py            # Optional FastAPI backend
-├── pages/                 # Streamlit multipage UI (Upload, Analysis, Recommendations, Flow, Reports, KB, Settings)
-├── streamlit_app.py        # Dashboard / entry point
+│   └── main.py            # FastAPI backend (REST API)
 ├── tests/                  # pytest suite (offline-safe: no LLM calls required)
 ├── sample_data/             # Sample process for a quick first run
 ├── docs/                     # Architecture, sequence, agent interaction, API, install, deployment docs
 ├── Dockerfile / docker-compose.yml
 └── requirements.txt
 ```
+
+The frontend lives in the sibling `process-diagnostic-frontend` repo
+(Next.js, deployed to Vercel).
 
 ## How the 25-30% Efficiency Target Is Delivered
 
@@ -105,16 +108,15 @@ recommendation category gets implemented in practice.
 - [Agent Interactions](docs/AGENT_INTERACTIONS.md) - why this agent order, shared tooling
 - [API Reference](docs/API.md) - optional FastAPI backend endpoints
 - [Installation Guide](docs/INSTALLATION.md)
-- [Deployment Guide](docs/DEPLOYMENT.md) - Streamlit Community Cloud, Render/Railway, Cloud Run, Vercel-hybrid
+- [Deployment Guide](docs/DEPLOYMENT.md) - Render/Railway/Cloud Run backend + Vercel frontend
 
 ## Important Note on Deployment
 
-**Streamlit cannot run on Vercel** - Vercel's serverless functions have no
-persistent process and no WebSocket support, both of which Streamlit
-requires. Deploy the Streamlit UI on Streamlit Community Cloud (free,
-recommended), Render, Railway, or Cloud Run; see `docs/DEPLOYMENT.md` for
-a fully-documented hybrid path if a single `*.vercel.app` URL is required
-(a Next.js frontend on Vercel calling this app's FastAPI backend hosted elsewhere).
+This backend has no persistent process on Vercel's serverless runtime, so
+it must be hosted on a platform with a long-running server - Render,
+Railway, Fly.io, or Cloud Run; see `docs/DEPLOYMENT.md`. The Next.js
+frontend deploys to Vercel and calls this backend via
+`NEXT_PUBLIC_API_URL`.
 
 ## License
 

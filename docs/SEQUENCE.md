@@ -3,7 +3,7 @@
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as Streamlit UI
+    participant UI as Next.js Frontend
     participant Extract as Extraction Pipeline
     participant Orch as LangGraph Orchestrator
     participant PE as PE Agent

@@ -12,7 +12,7 @@ from app.schemas.enums import LeanWaste, RiskLevel, ValueClassification
 
 
 class ProcessMetadata(BaseModel):
-    """Mandatory + optional intake fields collected in the Streamlit form."""
+    """Mandatory + optional intake fields collected in the intake form."""
 
     # Mandatory
     process_name: str = Field(..., min_length=2, max_length=200)

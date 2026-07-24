@@ -90,6 +90,7 @@ class Process(Base):
 
     executive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     savings_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    kpi_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     flow_mermaid_current: Mapped[str | None] = mapped_column(Text, nullable=True)
     flow_mermaid_future: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -101,6 +102,7 @@ class Process(Base):
     recommendations: Mapped[list["Recommendation"]] = relationship(back_populates="process", cascade="all, delete-orphan")
     agent_responses: Mapped[list["AgentResponse"]] = relationship(back_populates="process", cascade="all, delete-orphan")
     evaluation_scores: Mapped[list["EvaluationScore"]] = relationship(back_populates="process", cascade="all, delete-orphan")
+    deep_eval_findings: Mapped[list["DeepEvalFinding"]] = relationship(back_populates="process", cascade="all, delete-orphan")
     uploads: Mapped[list["Upload"]] = relationship(back_populates="process", cascade="all, delete-orphan")
 
 
@@ -160,6 +162,7 @@ class Recommendation(Base):
     sub_category: Mapped[str | None] = mapped_column(String(80), nullable=True)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str] = mapped_column(Text)
+    problem_statement: Mapped[str | None] = mapped_column(Text, nullable=True)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     proposed_by_agent: Mapped[str] = mapped_column(String(80))
 
@@ -226,6 +229,24 @@ class EvaluationScore(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
 
     process: Mapped["Process"] = relationship(back_populates="evaluation_scores")
+
+
+class DeepEvalFinding(Base):
+    """A deterministic grounding/numeric-sanity finding from the deep
+    evaluation layer, distinct from the RAGAS narrative-quality scores in
+    EvaluationScore - see app/evaluation/deep_eval.py.
+    """
+    __tablename__ = "deep_eval_findings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    process_id: Mapped[int] = mapped_column(ForeignKey("processes.id"))
+    severity: Mapped[str] = mapped_column(String(20))
+    recommendation_title: Mapped[str] = mapped_column(String(300))
+    issue: Mapped[str] = mapped_column(Text)
+    round_number: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+    process: Mapped["Process"] = relationship(back_populates="deep_eval_findings")
 
 
 class RagHistory(Base):
@@ -295,5 +316,31 @@ def get_session_factory():
     return _SessionLocal
 
 
+def _add_missing_columns(engine) -> None:
+    """SQLAlchemy's create_all() only creates missing TABLES, never adds
+    columns to a table that already exists. This adds any new nullable
+    columns introduced since a given local SQLite DB was first created, so
+    existing dev data survives schema changes instead of requiring a wipe.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+
+    if "recommendations" in table_names:
+        rec_columns = {col["name"] for col in inspector.get_columns("recommendations")}
+        if "problem_statement" not in rec_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE recommendations ADD COLUMN problem_statement TEXT"))
+
+    if "processes" in table_names:
+        process_columns = {col["name"] for col in inspector.get_columns("processes")}
+        if "kpi_summary_json" not in process_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE processes ADD COLUMN kpi_summary_json JSON"))
+
+
 def init_db() -> None:
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    _add_missing_columns(engine)

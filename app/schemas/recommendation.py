@@ -65,6 +65,46 @@ class SavingsEstimate(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
+class RecommendationDraft(BaseModel):
+    """What a generating agent (Kaizen/Automation/AI) is actually qualified
+    to produce. Deliberately excludes fields that belong to LATER pipeline
+    stages - `id` (DB-assigned), `proposed_by_agent` (overwritten by the
+    calling agent regardless), `retrieved_context_refs` (populated from the
+    ReAct loop's tool calls, not authored), `reviewer_notes`/`is_duplicate`/
+    `reviewer_approved` (set by the Reviewer Agent / postprocess step, never
+    by the agent proposing the recommendation).
+
+    This split matters: under OpenAI's strict JSON-schema structured-output
+    mode, every field on a schema becomes mandatory for the model to fill in
+    (Pydantic defaults are NOT respected server-side). Asking the model to
+    also decide `reviewer_approved` for its own not-yet-reviewed
+    recommendation produced near-random True/False answers, silently
+    dropping most recommendations from the savings totals. Keeping this
+    schema narrow to what the agent can legitimately judge avoids that
+    entire class of bug.
+    """
+
+    step_number: Optional[int] = Field(None, description="Null = process-level recommendation")
+    category: ImprovementCategory
+    sub_category: Optional[AutomationTool] = None
+    title: str
+    description: str
+    problem_statement: str = Field(
+        "", description="The specific problem/pain point at this process step that this recommendation resolves."
+    )
+    rationale: str = ""
+
+    roadmap_horizon: RoadmapHorizon = RoadmapHorizon.DAYS_60
+    complexity: ComplexityLevel = ComplexityLevel.MEDIUM
+    risk_level: RiskLevel = RiskLevel.LOW
+
+    prioritization: PrioritizationScore
+    savings: SavingsEstimate = Field(default_factory=SavingsEstimate)
+
+    confidence_score: float = Field(0.75, ge=0, le=1)
+    source_type: SourceType = SourceType.LLM_REASONING
+
+
 class Recommendation(BaseModel):
     id: Optional[int] = None
     step_number: Optional[int] = Field(None, description="Null = process-level recommendation")
@@ -72,6 +112,9 @@ class Recommendation(BaseModel):
     sub_category: Optional[AutomationTool] = None
     title: str
     description: str
+    problem_statement: str = Field(
+        "", description="The specific problem/pain point at this process step that this recommendation resolves."
+    )
     rationale: str = ""
 
     proposed_by_agent: str = Field(..., description="Which agent authored this: PE / Automation / AI / Kaizen")
@@ -89,3 +132,9 @@ class Recommendation(BaseModel):
     reviewer_notes: Optional[str] = None
     is_duplicate: bool = False
     reviewer_approved: bool = True
+
+
+def promote_draft(draft: RecommendationDraft, proposed_by_agent: str) -> Recommendation:
+    """Fills in the pipeline-owned fields RecommendationDraft deliberately
+    omits, with their correct not-yet-reviewed defaults."""
+    return Recommendation(proposed_by_agent=proposed_by_agent, **draft.model_dump())
