@@ -1,15 +1,17 @@
-"""LangGraph orchestration of the six-agent Gemba Walk workflow:
+"""LangGraph orchestration of the seven-agent Gemba Walk workflow:
 
 RAG retrieve -> PE Agent -> [Automation Agent || AI Agentic Agent || Kaizen
-Agent || Process Flow Agent] (run concurrently - all four only depend on PE
-Agent's diagnostics, not on each other's output) -> Postprocess (single
-fan-in from all four: roadmap horizon assignment + duplicate flagging over
-the merged recommendation list; Process Flow Agent's diagrams pass through
-untouched) -> Reviewer Agent + deep evaluation -> (loop back to Kaizen Agent
-for revision if the Reviewer Agent's own verdict or deep_eval's deterministic
-checks flag a problem, up to max_review_rounds - re-triggers only Kaizen,
-then flows back through Postprocess; Process Flow Agent does not re-run) ->
-Finalize (savings roll-up + executive summary + persistence).
+Agent || Lean Agent || Process Flow Agent] (run concurrently - all five only
+depend on PE Agent's diagnostics, not on each other's output; Kaizen and
+Lean are deliberately scoped to avoid overlap - see their module
+docstrings) -> Postprocess (single fan-in from all five: roadmap horizon
+assignment + duplicate flagging over the merged recommendation list;
+Process Flow Agent's diagrams pass through untouched) -> Reviewer Agent +
+deep evaluation -> (loop back to Kaizen Agent for revision if the Reviewer
+Agent's own verdict or deep_eval's deterministic checks flag a problem, up
+to max_review_rounds - re-triggers only Kaizen, then flows back through
+Postprocess; Lean/Automation/AI/Flow do not re-run) -> Finalize (savings
+roll-up + executive summary + persistence).
 
 RAGAS is deliberately NOT a node in this graph and never gates the revision
 loop. It only ever judged the Reviewer Agent's own narrative critique, not
@@ -29,17 +31,8 @@ Reviewer Agent to fire multiple times per revision round with stale round
 numbers - chaining two fan-in joins back-to-back before a loop's re-entry
 point is unsafe, even though a single fan-in join handles the same loop
 correctly. Route every parallel branch through ONE join before a loop-back
-target.
-
-IMPORTANT: Reviewer Agent must have exactly ONE incoming edge (from
-Postprocess), not two. An earlier version fed Postprocess and Process Flow
-Agent into Reviewer Agent as separate parallel edges; empirically (see a
-standalone LangGraph script reproducing this exact topology) that caused
-Reviewer Agent to fire multiple times per revision round with stale round
-numbers - chaining two fan-in joins back-to-back before a loop's re-entry
-point is unsafe, even though a single fan-in join handles the same loop
-correctly. Route every parallel branch through ONE join before a loop-back
-target.
+target - re-verified for this 5-way fan-out with another standalone repro
+before adding Lean Agent.
 
 Compiled with a LangGraph MemorySaver checkpointer, so each run's full
 state is checkpointed step-by-step under a unique thread_id - this is the
@@ -59,6 +52,7 @@ from app.agents.ai_agent import run_ai_agent
 from app.agents.automation_agent import run_automation_agent
 from app.agents.flow_agent import run_flow_agent
 from app.agents.kaizen_agent import assign_roadmap_horizons, run_kaizen_agent
+from app.agents.lean_agent import run_lean_agent
 from app.agents.pe_agent import run_pe_agent
 from app.agents.review_agent import run_review_agent
 from app.agents.savings_calculator import aggregate_savings, compute_current_state_baseline
@@ -105,29 +99,43 @@ def node_automation_agent(state: GembaWalkState) -> dict:
 
 
 def node_ai_agent(state: GembaWalkState) -> dict:
-    """Runs concurrently with node_automation_agent and node_kaizen_agent -
-    see their docstrings."""
+    """Runs concurrently with node_automation_agent, node_kaizen_agent and
+    node_lean_agent - see their docstrings."""
     recs, raw = run_ai_agent(state["metadata"], state["diagnostics"])
     return {"recommendations": recs, "trace": [f"AI Agentic Agent: {len(recs)} recommendations"]}
 
 
 def node_kaizen_agent(state: GembaWalkState) -> dict:
-    """Runs concurrently with node_automation_agent, node_ai_agent and
-    node_flow_agent (all four fan out from PE Agent and only depend on its
-    diagnostics, not on each other's output) - this is also the sole target
-    of the review loop's "revise" edge, so on a revision round only this
-    node re-runs before flowing back into node_postprocess.
+    """Runs concurrently with node_automation_agent, node_ai_agent,
+    node_lean_agent and node_flow_agent (all five fan out from PE Agent and
+    only depend on its diagnostics, not on each other's output) - this is
+    also the sole target of the review loop's "revise" edge, so on a
+    revision round only this node re-runs before flowing back into
+    node_postprocess. Scoped to tactical/governance recommendations only;
+    see kaizen_agent.py's module docstring for why it doesn't overlap with
+    node_lean_agent's structural-redesign territory.
     """
     recs, raw = run_kaizen_agent(state["metadata"], state["diagnostics"])
     round_number = state.get("review_round", 1)
     return {"recommendations": recs, "trace": [f"Kaizen Agent (round {round_number}): {len(recs)} recommendations"]}
 
 
+def node_lean_agent(state: GembaWalkState) -> dict:
+    """Runs concurrently with node_automation_agent, node_ai_agent,
+    node_kaizen_agent and node_flow_agent - see their docstrings. Scoped to
+    process simplification, standardization, step elimination and load
+    balancing (see lean_agent.py's module docstring for why it doesn't
+    overlap with node_kaizen_agent's tactical/governance territory).
+    """
+    recs, raw = run_lean_agent(state["metadata"], state["diagnostics"])
+    return {"recommendations": recs, "trace": [f"Lean Agent: {len(recs)} recommendations"]}
+
+
 def node_postprocess(state: GembaWalkState) -> dict:
     """Sole fan-in point before Reviewer Agent: runs once every branch
-    active in this superstep has completed - Automation, AI Agentic, Kaizen
-    and Process Flow on the initial pass, or just Kaizen alone on a revision
-    round (verified empirically that LangGraph's join still fires correctly
+    active in this superstep has completed - Automation, AI Agentic, Kaizen,
+    Lean and Process Flow on the initial pass, or just Kaizen alone on a
+    revision round (verified empirically that LangGraph's join still fires correctly
     when only one of several predecessors re-triggers it - see the module
     docstring for why this must be the ONLY node feeding Reviewer Agent).
     By the time this executes, state["recommendations"] holds the full
@@ -146,11 +154,11 @@ def node_postprocess(state: GembaWalkState) -> dict:
 
 
 def node_flow_agent(state: GembaWalkState) -> dict:
-    """Runs concurrently with node_automation_agent, node_ai_agent and
-    node_kaizen_agent - see their docstrings. Reasons directly from PE
-    Agent's diagnostic automation/AI-readiness scores rather than waiting
-    for the other three agents' specific recommendation titles (see
-    flow_agent.py's module docstring for the precision/speed trade-off).
+    """Runs concurrently with node_automation_agent, node_ai_agent,
+    node_kaizen_agent and node_lean_agent - see their docstrings. Reasons
+    directly from PE Agent's diagnostic automation/AI-readiness scores
+    rather than waiting for the other agents' specific recommendation
+    titles (see flow_agent.py's module docstring for the precision/speed trade-off).
     """
     future_steps, notes, current_mermaid, future_mermaid = run_flow_agent(
         state["metadata"], state["diagnostics"]
@@ -289,25 +297,28 @@ def build_gemba_walk_graph():
     graph.add_node("automation_agent", node_automation_agent)
     graph.add_node("ai_agent", node_ai_agent)
     graph.add_node("kaizen_agent", node_kaizen_agent)
+    graph.add_node("lean_agent", node_lean_agent)
     graph.add_node("postprocess", node_postprocess)
     graph.add_node("flow_agent", node_flow_agent)
     graph.add_node("review_agent", node_review_agent)
     graph.add_node("finalize", node_finalize)
 
     graph.set_entry_point("pe_agent")
-    # Fan-out: all four branches depend only on PE Agent's diagnostics, not
+    # Fan-out: all five branches depend only on PE Agent's diagnostics, not
     # on each other, so LangGraph runs them in the same superstep (parallel).
     graph.add_edge("pe_agent", "automation_agent")
     graph.add_edge("pe_agent", "ai_agent")
     graph.add_edge("pe_agent", "kaizen_agent")
+    graph.add_edge("pe_agent", "lean_agent")
     graph.add_edge("pe_agent", "flow_agent")
-    # Single fan-in: postprocess joins all four parallel branches (not just
-    # the three recommendation-generating ones) - see the module docstring
-    # for why review_agent must have exactly this one incoming edge rather
-    # than a second parallel edge from flow_agent.
+    # Single fan-in: postprocess joins all five parallel branches (not just
+    # the recommendation-generating ones) - see the module docstring for why
+    # review_agent must have exactly this one incoming edge rather than a
+    # second parallel edge from any of them.
     graph.add_edge("automation_agent", "postprocess")
     graph.add_edge("ai_agent", "postprocess")
     graph.add_edge("kaizen_agent", "postprocess")
+    graph.add_edge("lean_agent", "postprocess")
     graph.add_edge("flow_agent", "postprocess")
     graph.add_edge("postprocess", "review_agent")
     graph.add_conditional_edges("review_agent", route_after_review, {"revise": "kaizen_agent", "finalize": "finalize"})
