@@ -97,12 +97,27 @@ genuinely **reason, call a tool (RAG search or process-data lookup), observe
 the result, and reason again** before producing its final answer - rather
 than having all context force-fed into a single prompt. The orchestrator
 graph then adds a second layer of agentic control: a **conditional edge**
-that routes back to the Kaizen Agent for revision when the Reviewer
-Agent's RAGAS evaluation falls below the configured quality threshold
-(`RAGAS_MIN_SCORE`, default 0.70), up to `RAGAS_MAX_REVIEW_ROUNDS` rounds.
+that routes back to the Kaizen Agent for revision when the Reviewer Agent's
+own verdict or deep evaluation's deterministic numeric/grounding checks flag
+a problem, up to `MAX_REVIEW_ROUNDS` rounds (default 1).
+
+RAGAS is **not** part of this decision loop - see "RAGAS runs independently
+of the agent pipeline" below.
 
 ## Key Design Decisions
 
+- **RAGAS runs independently of the agent pipeline**, not as a graph node.
+  It only ever judged the Reviewer Agent's own narrative critique, not the
+  recommendations themselves, so it was never a meaningful signal for
+  whether to revise - and its four sequential LLM-judge calls (~90s) used
+  to dominate pipeline latency. `app/agents/orchestrator.py`'s Reviewer
+  Agent node captures its raw (question, answer, contexts) into
+  `review_artifacts`; `app/services/pipeline_runner.py` persists those and
+  scores them with RAGAS in a background thread *after* the pipeline has
+  already returned to the caller, and exposes
+  `POST /api/processes/{id}/evaluate-ragas` to re-score on demand - a
+  process the agents never see or react to. `RAGAS_MIN_SCORE` (default
+  0.70) still marks a score passed/failed for display.
 - **RAGAS scores the exact context each agent retrieved**, not a re-run
   retrieval - `app/agents/context_capture.py` records every chunk pulled by
   the `search_knowledge_base` tool during a ReAct loop via a `ContextVar`,

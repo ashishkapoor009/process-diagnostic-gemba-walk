@@ -8,7 +8,7 @@ from typing import Annotated, Any, Optional
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-from app.schemas.evaluation import AgentReviewNote, DeepEvalFinding, RagasScore
+from app.schemas.evaluation import AgentReviewNote, DeepEvalFinding
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic, ProcessStepInput
 from app.schemas.recommendation import Recommendation
 
@@ -44,9 +44,15 @@ class GembaWalkState(TypedDict, total=False):
     flow_mermaid_current: Annotated[str, _last_write]
     flow_mermaid_future: Annotated[str, _last_write]
 
-    # Review / evaluation loop
+    # Review / evaluation loop. Revision is gated by the Reviewer Agent's
+    # own verdict and deep_eval's deterministic checks only - RAGAS is
+    # deliberately NOT part of this graph (see orchestrator.py module
+    # docstring). review_artifacts carries the raw (question, answer,
+    # contexts) each round's Reviewer Agent produced so an independent,
+    # out-of-band process can score them with RAGAS after the pipeline
+    # completes, without RAGAS ever influencing agent behavior.
     review_notes: Annotated[list[AgentReviewNote], _last_write]
-    ragas_scores: Annotated[list[RagasScore], _last_write]
+    review_artifacts: Annotated[list[dict], _extend_list]
     deep_eval_findings: Annotated[list[DeepEvalFinding], _extend_list]
     review_round: int
     needs_revision: bool

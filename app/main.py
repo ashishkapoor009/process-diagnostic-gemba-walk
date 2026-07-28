@@ -34,7 +34,11 @@ from app.reports.standalone_exports import (
 )
 from app.reports.word import generate_word_report
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic, ProcessStepInput
-from app.services.pipeline_runner import run_and_persist_pipeline, update_current_state_diagnostics
+from app.services.pipeline_runner import (
+    rerun_ragas_evaluation,
+    run_and_persist_pipeline,
+    update_current_state_diagnostics,
+)
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -226,6 +230,19 @@ def update_process_steps(process_id: int, payload: UpdateStepsRequest) -> dict:
         return update_current_state_diagnostics(process_id, payload.diagnostics)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@api.post("/api/processes/{process_id}/evaluate-ragas")
+def trigger_ragas_evaluation(process_id: int) -> dict:
+    """Independent of the diagnostic pipeline - see
+    app/services/pipeline_runner.py. Re-scores the Reviewer Agent's stored
+    (question, answer, contexts) with RAGAS on demand; no agent re-runs.
+    """
+    try:
+        scores = rerun_ragas_evaluation(process_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"process_id": process_id, "rounds_scored": len(scores), "scores": [s.model_dump() for s in scores]}
 
 
 _REPORT_GENERATORS = {

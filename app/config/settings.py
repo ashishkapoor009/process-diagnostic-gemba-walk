@@ -40,16 +40,18 @@ class Settings(BaseSettings):
     # --- App behaviour ---
     app_env: str = "development"
     log_level: str = "INFO"
+    # RAGAS runs independently of the agent pipeline (see
+    # app/agents/orchestrator.py module docstring) - it never gates the
+    # revision loop, only ragas_min_score (used by the independent evaluator
+    # to mark a score passed/failed) remains here.
     ragas_min_score: float = 0.70
-    # RAGAS's 4-metric evaluation alone takes ~90s (each metric is a
-    # sequential LLM-judge call); a full revision round (Kaizen + Postprocess
-    # + Reviewer + RAGAS again) adds ~2.5-3 minutes on top of the ~3 minutes
-    # the rest of the pipeline takes. Capped at 1 round so a run reliably
-    # finishes under 5 minutes - deep evaluation's numeric auto-correction
-    # (the harder safety net for concrete errors like inflated FTE savings)
-    # still runs regardless of this setting; only the narrative-quality
-    # revision loop is capped.
-    ragas_max_review_rounds: int = 1
+    # The revision loop is gated only by the Reviewer Agent's own verdict
+    # and deep evaluation's deterministic numeric/grounding checks. Capped
+    # at 1 round so a run reliably finishes in well under a minute of
+    # agent+review time - deep evaluation's auto-correction (the harder
+    # safety net for concrete errors like inflated FTE savings) still runs
+    # regardless of this setting.
+    max_review_rounds: int = 1
     target_efficiency_low: float = 0.25
     target_efficiency_high: float = 0.30
 

@@ -191,6 +191,19 @@ def save_agent_response(process_id: int, agent_name: str, node_name: str, output
         return resp.id
 
 
+def get_agent_responses(process_id: int, node_name: Optional[str] = None) -> list[AgentResponse]:
+    with session_scope() as db:
+        q = db.query(AgentResponse).filter(AgentResponse.process_id == process_id)
+        if node_name:
+            q = q.filter(AgentResponse.node_name == node_name)
+        return q.order_by(AgentResponse.round_number).all()
+
+
+def delete_evaluation_scores(process_id: int) -> None:
+    with session_scope() as db:
+        db.query(EvaluationScore).filter(EvaluationScore.process_id == process_id).delete()
+
+
 def save_evaluation_score(process_id: int, ragas: RagasScore, threshold: float,
                            agent_response_id: Optional[int] = None, round_number: int = 1) -> None:
     with session_scope() as db:

@@ -5,11 +5,31 @@ Agent || Process Flow Agent] (run concurrently - all four only depend on PE
 Agent's diagnostics, not on each other's output) -> Postprocess (single
 fan-in from all four: roadmap horizon assignment + duplicate flagging over
 the merged recommendation list; Process Flow Agent's diagrams pass through
-untouched) -> Reviewer Agent -> RAGAS + deep evaluation -> (loop back to
-Kaizen Agent for revision if below threshold, up to ragas_max_review_rounds
-- re-triggers only Kaizen, then flows back through Postprocess; Process Flow
-Agent does not re-run) -> Finalize (savings roll-up + executive summary +
-persistence).
+untouched) -> Reviewer Agent + deep evaluation -> (loop back to Kaizen Agent
+for revision if the Reviewer Agent's own verdict or deep_eval's deterministic
+checks flag a problem, up to max_review_rounds - re-triggers only Kaizen,
+then flows back through Postprocess; Process Flow Agent does not re-run) ->
+Finalize (savings roll-up + executive summary + persistence).
+
+RAGAS is deliberately NOT a node in this graph and never gates the revision
+loop. It only ever judged the Reviewer Agent's own narrative critique, not
+the recommendations themselves, so it was never a meaningful signal about
+whether an ANSWER should be revised - and its 4 sequential LLM-judge calls
+(~90s) previously dominated pipeline latency. The Reviewer Agent still
+returns its raw (question, answer, contexts) in `review_artifacts`; the
+service layer (see app/services/pipeline_runner.py) persists those and
+scores them with RAGAS out-of-band, after the pipeline has already returned
+to the caller - a fully independent process the agents never see or react to.
+
+IMPORTANT: Reviewer Agent must have exactly ONE incoming edge (from
+Postprocess), not two. An earlier version fed Postprocess and Process Flow
+Agent into Reviewer Agent as separate parallel edges; empirically (see a
+standalone LangGraph script reproducing this exact topology) that caused
+Reviewer Agent to fire multiple times per revision round with stale round
+numbers - chaining two fan-in joins back-to-back before a loop's re-entry
+point is unsafe, even though a single fan-in join handles the same loop
+correctly. Route every parallel branch through ONE join before a loop-back
+target.
 
 IMPORTANT: Reviewer Agent must have exactly ONE incoming edge (from
 Postprocess), not two. An earlier version fed Postprocess and Process Flow
@@ -46,7 +66,6 @@ from app.config.llm_factory import get_chat_model
 from app.config.settings import get_settings
 from app.evaluation.deep_eval import deep_evaluate_recommendations
 from app.evaluation.kpi_engine import compute_kpis
-from app.evaluation.ragas import evaluate_response
 from app.schemas.agent_state import GembaWalkState
 from app.utils.logging import get_logger
 
@@ -144,27 +163,21 @@ def node_flow_agent(state: GembaWalkState) -> dict:
 
 
 def node_review_agent(state: GembaWalkState) -> dict:
+    """Gates the revision loop on the Reviewer Agent's own verdict and
+    deep_eval's deterministic checks ONLY. RAGAS is not computed here - see
+    the module docstring for why. `question`/`raw_answer`/`contexts` are
+    captured into `review_artifacts` purely so an independent process can
+    score them later; nothing in this node reads or reacts to a RAGAS score.
+    """
     round_number = state.get("review_round", 1)
     recommendations = state.get("recommendations", [])
+    settings = get_settings()
 
     review_note, raw_answer, question, contexts = run_review_agent(
         state["metadata"], state["diagnostics"], recommendations, round_number=round_number
     )
 
-    # `contexts` from the ReAct loop is only the knowledge-base chunks the
-    # Reviewer Agent retrieved - but its critique is mostly about THIS
-    # process's own facts (FTE, savings figures, step names), which live in
-    # `question` (the full prompt), not the KB. Scoring faithfulness/context
-    # metrics against KB chunks alone was measuring the wrong ground truth
-    # and drove every run's scores toward zero regardless of answer quality.
-    # `question` itself is legitimate grounding: the reviewer is supposed to
-    # draw its claims from exactly that process data.
-    ragas_score = evaluate_response(question=question, answer=raw_answer, contexts=contexts + [question])
-    settings = get_settings()
-    ragas_passed = ragas_score.passes(settings.ragas_min_score)
-
-    # Deep evaluation: deterministic grounding + numeric sanity checks that
-    # RAGAS (which only judges the reviewer's narrative answer) can't catch -
+    # Deep evaluation: deterministic grounding + numeric sanity checks -
     # e.g. a recommendation claiming more FTE savings than the process has,
     # or naming a system never mentioned anywhere in the process intake.
     deep_result = deep_evaluate_recommendations(
@@ -172,25 +185,21 @@ def node_review_agent(state: GembaWalkState) -> dict:
     )
 
     needs_revision = (
-        review_note.verdict == "needs_revision" or not ragas_passed or not deep_result.passed
-    ) and round_number < settings.ragas_max_review_rounds
-
-    if not ragas_passed:
-        for r in recommendations:
-            if not r.reviewer_notes:
-                r.reviewer_notes = "RAGAS score below threshold this round - under revision."
+        review_note.verdict == "needs_revision" or not deep_result.passed
+    ) and round_number < settings.max_review_rounds
 
     trace = [
         f"Reviewer Agent (round {round_number}): verdict={review_note.verdict}, "
-        f"RAGAS overall={ragas_score.overall:.2f} (threshold {settings.ragas_min_score}), "
         f"deep_eval={'pass' if deep_result.passed else 'FAIL'} "
         f"({len(deep_result.findings)} finding(s), {deep_result.corrections_applied} auto-corrected), "
-        f"needs_revision={needs_revision}"
+        f"needs_revision={needs_revision} (RAGAS scored independently after pipeline completion)"
     ]
 
     return {
         "review_notes": state.get("review_notes", []) + [review_note],
-        "ragas_scores": state.get("ragas_scores", []) + [ragas_score],
+        "review_artifacts": [
+            {"round_number": round_number, "question": question, "raw_answer": raw_answer, "contexts": contexts}
+        ],
         "deep_eval_findings": deep_result.findings,
         "needs_revision": needs_revision,
         "review_round": round_number + 1,
@@ -317,7 +326,7 @@ def run_full_diagnostic(metadata, raw_steps) -> GembaWalkState:
         "raw_steps": raw_steps,
         "recommendations": [],
         "review_notes": [],
-        "ragas_scores": [],
+        "review_artifacts": [],
         "deep_eval_findings": [],
         "kpi_summary": {},
         "review_round": 1,
