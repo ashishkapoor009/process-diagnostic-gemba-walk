@@ -19,8 +19,43 @@ import datetime as dt
 from app.config.settings import get_settings
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic
 from app.schemas.recommendation import Recommendation
+from app.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 PRODUCTIVE_MINUTES_PER_FTE_PER_MONTH = 9_000  # ~150 productive hours/month after shrinkage
+
+
+def _clamp_fte_savings(metadata: ProcessMetadata, approved: list[Recommendation]) -> None:
+    """A process can't release more FTE capacity than it employs, whether
+    from one recommendation's own claim or summed across all of them. This
+    is deterministic arithmetic hygiene the calculator itself guarantees -
+    not an "evaluation" of the agents' work, so it stays in the flow (unlike
+    RAGAS/deep evaluation, see orchestrator.py's module docstring) and
+    mutates in place so the recommendations table and the aggregate totals
+    it feeds never disagree.
+    """
+    if not metadata.current_fte:
+        return
+
+    for r in approved:
+        if r.savings.fte_savings > metadata.current_fte:
+            original = r.savings.fte_savings
+            r.savings.fte_savings = round(metadata.current_fte * 0.5, 2)
+            logger.info(
+                f"Clamped '{r.title}' FTE savings from {original} to {r.savings.fte_savings} "
+                f"(exceeded process total of {metadata.current_fte})"
+            )
+
+    total = sum(r.savings.fte_savings for r in approved)
+    if total > metadata.current_fte:
+        scale = (metadata.current_fte * 0.9) / total  # leave 10% headroom
+        for r in approved:
+            r.savings.fte_savings = round(r.savings.fte_savings * scale, 3)
+        logger.info(
+            f"Scaled aggregate FTE savings across {len(approved)} recommendations by {scale:.2f}x "
+            f"(summed to {total:.2f} against a process total of {metadata.current_fte})"
+        )
 
 
 def compute_current_state_baseline(metadata: ProcessMetadata, steps: list[ProcessStepDiagnostic]) -> dict:
@@ -50,6 +85,7 @@ def aggregate_savings(metadata: ProcessMetadata, recommendations: list[Recommend
     settings = get_settings()
 
     approved = [r for r in recommendations if r.reviewer_approved and not r.is_duplicate]
+    _clamp_fte_savings(metadata, approved)
 
     total_fte_savings = sum(r.savings.fte_savings for r in approved)
 

@@ -1,10 +1,21 @@
-"""Deep evaluation: deterministic grounding and numeric sanity checks that
-complement RAGAS. RAGAS judges whether the Reviewer Agent's narrative
-answer is faithful to retrieved knowledge - it has no way to know that a
-recommendation claims more FTE savings than the process actually has, or
-references a process step that doesn't exist. This module catches exactly
-that class of error and auto-corrects the ones that are safe to auto-correct
-(capping implausible numbers), flagging everything else for human review.
+"""Deep evaluation: deterministic grounding checks that complement RAGAS.
+RAGAS judges whether the Reviewer Agent's narrative answer is faithful to
+retrieved knowledge - it has no way to know that a recommendation
+references a process step that doesn't exist, or is asserted with high
+confidence but no retrieved grounding at all. This module catches exactly
+that class of error.
+
+Purely observational - it reports findings, it does not correct data.
+Like RAGAS (see app/agents/orchestrator.py's module docstring), it runs
+independently of the agent graph: app/services/pipeline_runner.py calls it
+on already-persisted diagnostics/recommendations, after the pipeline has
+returned to its caller, so it never influences agent behavior or the
+revision loop. It used to also flag/auto-correct FTE-savings numbers that
+exceeded the process total, but by the time this runs independently the
+recommendations are already pulled from SQLite post-persistence - the
+savings calculator guarantees that arithmetic is sane before anything is
+ever persisted (see app/agents/savings_calculator.py's
+_clamp_fte_savings), so a check here could never find anything to flag.
 """
 from __future__ import annotations
 
@@ -21,7 +32,6 @@ logger = get_logger(__name__)
 @dataclass
 class DeepEvalResult:
     findings: list[DeepEvalFinding] = field(default_factory=list)
-    corrections_applied: int = 0
 
     @property
     def passed(self) -> bool:
@@ -36,46 +46,8 @@ def deep_evaluate_recommendations(
     valid_step_numbers = {d.step_number for d in diagnostics}
     active_recs = [r for r in recommendations if not r.is_duplicate]
 
-    # 1. Per-recommendation FTE savings can never exceed the process's total
-    # current FTE - a single recommendation "releasing" more FTEs than the
-    # process employs is a clear hallucination/arithmetic error.
-    for r in active_recs:
-        if r.savings.fte_savings > metadata.current_fte:
-            original = r.savings.fte_savings
-            r.savings.fte_savings = round(metadata.current_fte * 0.5, 2)
-            result.corrections_applied += 1
-            result.findings.append(
-                DeepEvalFinding(
-                    severity="error", recommendation_title=r.title, round_number=round_number,
-                    issue=(
-                        f"FTE savings ({original}) exceeded total process FTE ({metadata.current_fte}); "
-                        f"capped to {r.savings.fte_savings}."
-                    ),
-                )
-            )
-
-    # 2. Aggregate FTE savings across all recommendations shouldn't exceed
-    # current FTE either (a process can't release more capacity than it has,
-    # even split across many recommendations touching different steps).
-    total_fte_savings = sum(r.savings.fte_savings for r in active_recs)
-    if total_fte_savings > metadata.current_fte and total_fte_savings > 0:
-        scale = (metadata.current_fte * 0.9) / total_fte_savings  # leave 10% headroom
-        for r in active_recs:
-            r.savings.fte_savings = round(r.savings.fte_savings * scale, 3)
-        result.corrections_applied += 1
-        result.findings.append(
-            DeepEvalFinding(
-                severity="error", recommendation_title="(aggregate)", round_number=round_number,
-                issue=(
-                    f"Sum of FTE savings across {len(active_recs)} recommendations ({total_fte_savings:.2f}) "
-                    f"exceeded total process FTE ({metadata.current_fte}); scaled down by {scale:.2f}x."
-                ),
-            )
-        )
-
-    # 3. A recommendation referencing a step_number that doesn't exist in
-    # this process's diagnosed steps is a grounding failure - flagged, not
-    # auto-corrected (safer to surface than to guess which real step it meant).
+    # A recommendation referencing a step_number that doesn't exist in this
+    # process's diagnosed steps is a grounding failure.
     for r in active_recs:
         if r.step_number is not None and r.step_number not in valid_step_numbers:
             result.findings.append(
@@ -85,8 +57,8 @@ def deep_evaluate_recommendations(
                 )
             )
 
-    # 4. Overconfident with no retrieved grounding: pure LLM reasoning
-    # claiming very high confidence is a soft red flag worth a human look.
+    # Overconfident with no retrieved grounding: pure LLM reasoning claiming
+    # very high confidence is a soft red flag worth a human look.
     for r in active_recs:
         if r.source_type.value == "LLM Reasoning" and r.confidence_score > 0.9:
             result.findings.append(
@@ -97,8 +69,6 @@ def deep_evaluate_recommendations(
             )
 
     if result.findings:
-        logger.info(
-            f"Deep evaluation: {len(result.findings)} finding(s), {result.corrections_applied} auto-corrected."
-        )
+        logger.info(f"Deep evaluation: {len(result.findings)} finding(s).")
 
     return result

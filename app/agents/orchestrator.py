@@ -6,22 +6,31 @@ depend on PE Agent's diagnostics, not on each other's output; Kaizen and
 Lean are deliberately scoped to avoid overlap - see their module
 docstrings) -> Postprocess (single fan-in from all five: roadmap horizon
 assignment + duplicate flagging over the merged recommendation list;
-Process Flow Agent's diagrams pass through untouched) -> Reviewer Agent +
-deep evaluation -> (loop back to Kaizen Agent for revision if the Reviewer
-Agent's own verdict or deep_eval's deterministic checks flag a problem, up
-to max_review_rounds - re-triggers only Kaizen, then flows back through
-Postprocess; Lean/Automation/AI/Flow do not re-run) -> Finalize (savings
-roll-up + executive summary + persistence).
+Process Flow Agent's diagrams pass through untouched) -> Reviewer Agent ->
+(loop back to Kaizen Agent for revision if the Reviewer Agent's own verdict
+says so, up to max_review_rounds - re-triggers only Kaizen, then flows back
+through Postprocess; Lean/Automation/AI/Flow do not re-run) -> Finalize
+(savings roll-up + executive summary + persistence).
 
-RAGAS is deliberately NOT a node in this graph and never gates the revision
-loop. It only ever judged the Reviewer Agent's own narrative critique, not
-the recommendations themselves, so it was never a meaningful signal about
-whether an ANSWER should be revised - and its 4 sequential LLM-judge calls
-(~90s) previously dominated pipeline latency. The Reviewer Agent still
-returns its raw (question, answer, contexts) in `review_artifacts`; the
-service layer (see app/services/pipeline_runner.py) persists those and
-scores them with RAGAS out-of-band, after the pipeline has already returned
-to the caller - a fully independent process the agents never see or react to.
+RAGAS AND DEEP EVALUATION ARE DELIBERATELY NOT NODES IN THIS GRAPH, and
+neither one gates the revision loop - revision is driven solely by the
+Reviewer Agent's own qualitative verdict. RAGAS only ever judged the
+Reviewer Agent's own narrative critique, not the recommendations
+themselves; deep evaluation checks grounding (invalid step references,
+overconfident ungrounded claims) that's useful to know about but doesn't
+require the agent to react to it. Both were previously computed inline and
+either gated or (deep evaluation) actively mutated recommendation data
+mid-pipeline - neither influences agent behavior anymore. The Reviewer
+Agent still returns its raw (question, answer, contexts) in
+`review_artifacts`; the service layer (see app/services/pipeline_runner.py)
+persists that alongside the finalized recommendations, then scores/checks
+both with RAGAS and deep evaluation out-of-band, after the pipeline has
+already returned to the caller - two fully independent processes the
+agents never see or react to. The one numeric guarantee deep evaluation
+used to enforce in-line (a recommendation can't claim more FTE savings
+than the process has) is now the savings calculator's own responsibility
+(see app/agents/savings_calculator.py's _clamp_fte_savings) - correct
+arithmetic isn't an "evaluation," so it stays in the flow.
 
 IMPORTANT: Reviewer Agent must have exactly ONE incoming edge (from
 Postprocess), not two. An earlier version fed Postprocess and Process Flow
@@ -58,7 +67,6 @@ from app.agents.review_agent import run_review_agent
 from app.agents.savings_calculator import aggregate_savings, compute_current_state_baseline
 from app.config.llm_factory import get_chat_model
 from app.config.settings import get_settings
-from app.evaluation.deep_eval import deep_evaluate_recommendations
 from app.evaluation.kpi_engine import compute_kpis
 from app.schemas.agent_state import GembaWalkState
 from app.utils.logging import get_logger
@@ -171,11 +179,14 @@ def node_flow_agent(state: GembaWalkState) -> dict:
 
 
 def node_review_agent(state: GembaWalkState) -> dict:
-    """Gates the revision loop on the Reviewer Agent's own verdict and
-    deep_eval's deterministic checks ONLY. RAGAS is not computed here - see
-    the module docstring for why. `question`/`raw_answer`/`contexts` are
-    captured into `review_artifacts` purely so an independent process can
-    score them later; nothing in this node reads or reacts to a RAGAS score.
+    """Gates the revision loop SOLELY on the Reviewer Agent's own verdict.
+    Neither RAGAS nor deep evaluation are computed here - see the module
+    docstring for why. `question`/`raw_answer`/`contexts` are captured into
+    `review_artifacts` purely so an independent process can score them with
+    RAGAS later; deep evaluation runs independently too, straight off the
+    finalized recommendations once they're persisted (see
+    app/services/pipeline_runner.py) - nothing in this node reads or reacts
+    to either.
     """
     round_number = state.get("review_round", 1)
     recommendations = state.get("recommendations", [])
@@ -185,22 +196,11 @@ def node_review_agent(state: GembaWalkState) -> dict:
         state["metadata"], state["diagnostics"], recommendations, round_number=round_number
     )
 
-    # Deep evaluation: deterministic grounding + numeric sanity checks -
-    # e.g. a recommendation claiming more FTE savings than the process has,
-    # or naming a system never mentioned anywhere in the process intake.
-    deep_result = deep_evaluate_recommendations(
-        state["metadata"], state["diagnostics"], recommendations, round_number=round_number
-    )
-
-    needs_revision = (
-        review_note.verdict == "needs_revision" or not deep_result.passed
-    ) and round_number < settings.max_review_rounds
+    needs_revision = review_note.verdict == "needs_revision" and round_number < settings.max_review_rounds
 
     trace = [
         f"Reviewer Agent (round {round_number}): verdict={review_note.verdict}, "
-        f"deep_eval={'pass' if deep_result.passed else 'FAIL'} "
-        f"({len(deep_result.findings)} finding(s), {deep_result.corrections_applied} auto-corrected), "
-        f"needs_revision={needs_revision} (RAGAS scored independently after pipeline completion)"
+        f"needs_revision={needs_revision} (RAGAS and deep evaluation both run independently after pipeline completion)"
     ]
 
     return {
@@ -208,7 +208,6 @@ def node_review_agent(state: GembaWalkState) -> dict:
         "review_artifacts": [
             {"round_number": round_number, "question": question, "raw_answer": raw_answer, "contexts": contexts}
         ],
-        "deep_eval_findings": deep_result.findings,
         "needs_revision": needs_revision,
         "review_round": round_number + 1,
         "trace": trace,
@@ -338,7 +337,6 @@ def run_full_diagnostic(metadata, raw_steps) -> GembaWalkState:
         "recommendations": [],
         "review_notes": [],
         "review_artifacts": [],
-        "deep_eval_findings": [],
         "kpi_summary": {},
         "review_round": 1,
         "trace": [],

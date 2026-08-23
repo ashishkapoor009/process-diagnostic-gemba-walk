@@ -1,15 +1,15 @@
-"""Runs the full six-agent diagnostic via the LangGraph orchestrator and
-persists every artifact (diagnostics, recommendations, deep eval findings,
-flow diagrams, executive summary) to SQLite so it survives process restarts
-and can be re-fetched by the API.
+"""Runs the full seven-agent diagnostic via the LangGraph orchestrator and
+persists every artifact (diagnostics, recommendations, flow diagrams,
+executive summary) to SQLite so it survives process restarts and can be
+re-fetched by the API.
 
-RAGAS evaluation lives entirely in this module, not the agent graph (see
-app/agents/orchestrator.py's module docstring for why). run_and_persist_pipeline
-persists the Reviewer Agent's raw (question, answer, contexts) per round and
-returns to its caller WITHOUT waiting for RAGAS; a background thread scores
-them afterward. rerun_ragas_evaluation lets a caller (see the
-/api/processes/{id}/evaluate-ragas endpoint) re-trigger scoring on demand
-against those same stored artifacts, independent of any pipeline run.
+RAGAS and deep evaluation both live entirely in this module, not the agent
+graph (see app/agents/orchestrator.py's module docstring for why).
+run_and_persist_pipeline returns to its caller WITHOUT waiting for either -
+a background thread runs both afterward, against data already persisted.
+rerun_ragas_evaluation / rerun_deep_evaluation let a caller (see the
+/api/processes/{id}/evaluate-ragas and /evaluate-deep endpoints) re-trigger
+either independently at any time, with no agent involved.
 """
 from __future__ import annotations
 
@@ -20,7 +20,8 @@ from app.agents.orchestrator import run_full_diagnostic
 from app.agents.savings_calculator import compute_current_state_baseline
 from app.config.settings import get_settings
 from app.database import crud
-from app.database.rehydrate import rehydrate_process_metadata, rehydrate_recommendations
+from app.database.rehydrate import rehydrate_diagnostics, rehydrate_process_metadata, rehydrate_recommendations
+from app.evaluation.deep_eval import DeepEvalResult, deep_evaluate_recommendations
 from app.evaluation.kpi_engine import compute_kpis
 from app.evaluation.ragas import evaluate_response
 from app.graphs.mermaid import render_swimlane
@@ -76,20 +77,20 @@ def run_and_persist_pipeline(metadata: ProcessMetadata, raw_steps: list[ProcessS
             output_text=json.dumps(artifact), round_number=artifact["round_number"],
         )
 
-    if final_state.get("deep_eval_findings"):
-        crud.save_deep_eval_findings(process_id, final_state["deep_eval_findings"])
-
     crud.log_audit(process_id, "system", "diagnostic_completed", {
         "diagnostics": len(diagnostics), "recommendations": len(recommendations),
     })
 
     logger.info(f"Persisted diagnostic run for process_id={process_id}")
 
-    # Fire-and-forget: RAGAS never blocks the caller or influences the
-    # pipeline above. If this thread fails or the process restarts before
-    # it finishes, the process simply has no RAGAS scores yet - the
-    # frontend already handles that (empty evaluation_scores) and
-    # rerun_ragas_evaluation can compute them later on demand.
+    # Fire-and-forget: neither RAGAS nor deep evaluation ever blocks the
+    # caller or influences the pipeline above - both run here, against data
+    # already persisted, not against anything still in memory from the run.
+    # If this thread fails or the process restarts before it finishes, the
+    # process simply has no scores/findings yet - the frontend already
+    # handles that (empty evaluation_scores/deep_eval_findings) and
+    # rerun_ragas_evaluation/rerun_deep_evaluation can compute them later on demand.
+    threading.Thread(target=run_independent_deep_evaluation, args=(process_id,), daemon=True).start()
     if review_artifacts:
         threading.Thread(
             target=run_independent_ragas_evaluation, args=(process_id, review_artifacts), daemon=True
@@ -142,6 +143,41 @@ def rerun_ragas_evaluation(process_id: int) -> list[RagasScore]:
     review_artifacts = [json.loads(row.output_text) for row in stored]
     crud.delete_evaluation_scores(process_id)
     return run_independent_ragas_evaluation(process_id, review_artifacts)
+
+
+def run_independent_deep_evaluation(process_id: int) -> DeepEvalResult:
+    """The only place deep evaluation actually runs. Re-fetches the
+    diagnostics/recommendations already persisted for this process and
+    checks them - completely outside the agent graph, no agent re-runs, and
+    (unlike its previous in-graph incarnation) it never mutates the
+    recommendations it reads. Safe to call from a background thread
+    (fire-and-forget after a fresh run) or synchronously (a manual re-run
+    via the API) - same function either way, this IS the manual re-run.
+    """
+    data = crud.get_process_full(process_id)
+    process = data.get("process")
+    if not process:
+        raise ValueError(f"Process {process_id} not found")
+
+    metadata = rehydrate_process_metadata(process)
+    diagnostics = rehydrate_diagnostics(data.get("steps", []))
+    recommendations = rehydrate_recommendations(data.get("recommendations", []))
+
+    try:
+        result = deep_evaluate_recommendations(metadata, diagnostics, recommendations)
+        crud.save_deep_eval_findings(process_id, result.findings)
+        logger.info(f"Independent deep evaluation complete for process_id={process_id}: {len(result.findings)} finding(s)")
+        return result
+    except Exception:
+        logger.exception(f"Independent deep evaluation failed for process_id={process_id}")
+        raise
+
+
+def rerun_deep_evaluation(process_id: int) -> DeepEvalResult:
+    """Manual on-demand re-check - identical to the background pass
+    run_and_persist_pipeline kicks off automatically, exposed for a caller
+    to trigger explicitly (see the /api/processes/{id}/evaluate-deep endpoint)."""
+    return run_independent_deep_evaluation(process_id)
 
 
 def update_current_state_diagnostics(process_id: int, diagnostics: list[ProcessStepDiagnostic]) -> dict:

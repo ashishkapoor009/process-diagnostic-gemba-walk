@@ -35,6 +35,7 @@ from app.reports.standalone_exports import (
 from app.reports.word import generate_word_report
 from app.schemas.process import ProcessMetadata, ProcessStepDiagnostic, ProcessStepInput
 from app.services.pipeline_runner import (
+    rerun_deep_evaluation,
     rerun_ragas_evaluation,
     run_and_persist_pipeline,
     update_current_state_diagnostics,
@@ -243,6 +244,23 @@ def trigger_ragas_evaluation(process_id: int) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"process_id": process_id, "rounds_scored": len(scores), "scores": [s.model_dump() for s in scores]}
+
+
+@api.post("/api/processes/{process_id}/evaluate-deep")
+def trigger_deep_evaluation(process_id: int) -> dict:
+    """Independent of the diagnostic pipeline, symmetric with
+    evaluate-ragas above - see app/services/pipeline_runner.py. Re-checks
+    the process's already-persisted diagnostics/recommendations on demand;
+    no agent re-runs, and it never mutates the recommendations it reads.
+    """
+    try:
+        result = rerun_deep_evaluation(process_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "process_id": process_id, "passed": result.passed,
+        "findings": [f.model_dump() for f in result.findings],
+    }
 
 
 _REPORT_GENERATORS = {
