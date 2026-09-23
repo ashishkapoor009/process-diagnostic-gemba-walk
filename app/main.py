@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from app.config.settings import get_settings
 from app.database import crud
 from app.database.rehydrate import load_report_context
-from app.extraction.document_parser import parse_document
+from app.extraction.document_parser import SUPPORTED_EXTENSIONS, UnsupportedFormatError, parse_document
 from app.extraction.step_extractor import extract_steps_from_text
 from app.reports.excel import generate_excel_report
 from app.reports.pdf import generate_pdf_report
@@ -88,16 +88,59 @@ def extract_from_text(payload: ExtractStepsRequest) -> list[ProcessStepInput]:
 
 
 @api.post("/api/extract/upload")
-async def extract_from_upload(file: UploadFile = File(...)) -> dict:
+async def extract_from_upload(file: UploadFile = File(...), sheet_hint: str | None = Form(None)) -> dict:
+    """Parses an uploaded process map and runs the LLM step-extractor on it.
+    `sheet_hint` is an optional free-form instruction (e.g. "sheet 3" or
+    "use the Process Steps tab", typed by the user in the same text box used
+    for manual step entry) that narrows a multi-sheet Excel/CSV upload down
+    to one sheet - it's never required, and is ignored for other file types.
+    """
     settings = get_settings()
-    upload_path = Path(settings.upload_dir_abs) / file.filename
+    filename = file.filename or "upload"
+    ext = Path(filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext or 'unknown'}'. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}.",
+        )
+
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail=f"'{filename}' is empty.")
+
+    upload_path = Path(settings.upload_dir_abs) / filename
     upload_path.write_bytes(content)
 
-    extracted = parse_document(upload_path)
-    steps = extract_steps_from_text(extracted.combined_text, "")
-    crud.log_upload(None, file.filename, extracted.file_type, str(upload_path), len(steps))
-    return {"filename": file.filename, "used_ocr": extracted.used_ocr, "steps": [s.model_dump() for s in steps]}
+    try:
+        extracted = parse_document(upload_path, sheet_hint=sheet_hint)
+    except UnsupportedFormatError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(f"Failed to parse uploaded file '{filename}'")
+        raise HTTPException(status_code=422, detail=f"Could not read '{filename}': {exc}") from exc
+
+    if not extracted.combined_text.strip():
+        crud.log_upload(None, filename, extracted.file_type, str(upload_path), 0)
+        return {
+            "filename": filename, "file_type": extracted.file_type, "used_ocr": extracted.used_ocr,
+            "sources": extracted.sources, "steps": [],
+            "warning": "No extractable text or tables were found in this file.",
+        }
+
+    try:
+        steps = extract_steps_from_text(extracted.combined_text, "")
+    except Exception as exc:
+        logger.exception(f"LLM step extraction failed for '{filename}'")
+        raise HTTPException(
+            status_code=502, detail=f"Read '{filename}' but the AI step-extraction step failed: {exc}"
+        ) from exc
+
+    crud.log_upload(None, filename, extracted.file_type, str(upload_path), len(steps))
+    warning = None if steps else "The file was parsed, but no process steps could be identified from its content."
+    return {
+        "filename": filename, "file_type": extracted.file_type, "used_ocr": extracted.used_ocr,
+        "sources": extracted.sources, "steps": [s.model_dump() for s in steps], "warning": warning,
+    }
 
 
 @api.post("/api/processes")
