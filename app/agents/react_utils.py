@@ -29,7 +29,15 @@ def run_react_agent(system_prompt: str, user_message: str, tools: list, temperat
     llm = get_chat_model(temperature=temperature)
     # This pinned langgraph version (0.2.x) takes the system prompt via
     # `state_modifier`, not the `prompt` kwarg used by newer langgraph releases.
-    agent = create_react_agent(llm, tools=tools, state_modifier=system_prompt)
+    # checkpointer=False opts this subgraph out of inheriting the parent
+    # GembaWalkState graph's MemorySaver checkpointer. Without it, every
+    # parallel agent node (Automation/AI/Kaizen/Lean/Flow) invokes its own
+    # create_react_agent subgraph in the same superstep, and LangGraph raises
+    # "Multiple subgraphs called inside the same node" - each inherits the
+    # parent's checkpointer by default, and several doing so concurrently
+    # trips that safety check. This tool-use loop never needs to be
+    # independently resumed, so opting out is correct, not a workaround.
+    agent = create_react_agent(llm, tools=tools, state_modifier=system_prompt, checkpointer=False)
     result = agent.invoke({"messages": [{"role": "user", "content": user_message}]})
     final_message = result["messages"][-1]
     return final_message.content if hasattr(final_message, "content") else str(final_message)
