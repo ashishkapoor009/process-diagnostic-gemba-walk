@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["openai", "azure_openai"] = "openai"
 
     openai_api_key: str = Field(default="")
-    openai_chat_model: str = "gpt-4o"
+    openai_chat_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-large"
 
     azure_openai_api_key: str = Field(default="")
