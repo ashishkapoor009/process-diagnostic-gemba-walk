@@ -20,6 +20,9 @@ tiktoken==0.8.0
 # --- Database ---
 SQLAlchemy==2.0.36
 
+# --- Persistence backup (optional: only used when GCS_BACKUP_BUCKET is set) ---
+google-cloud-storage==2.19.0
+
 # --- Document extraction / OCR ---
 pymupdf==1.25.1
 pdfplumber==0.11.4

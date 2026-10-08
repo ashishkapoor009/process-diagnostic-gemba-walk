@@ -20,6 +20,7 @@ from app.agents.orchestrator import run_full_diagnostic
 from app.agents.savings_calculator import compute_current_state_baseline
 from app.config.settings import get_settings
 from app.database import crud
+from app.database.backup import backup_to_gcs
 from app.database.rehydrate import rehydrate_diagnostics, rehydrate_process_metadata, rehydrate_recommendations
 from app.evaluation.deep_eval import DeepEvalResult, deep_evaluate_recommendations
 from app.evaluation.kpi_engine import compute_kpis
@@ -99,6 +100,11 @@ def run_and_persist_pipeline(metadata: ProcessMetadata, raw_steps: list[ProcessS
     # check whether storage has grown past budget. Never touches anything
     # younger than settings.min_retention_days - see enforce_storage_budget.
     threading.Thread(target=crud.enforce_storage_budget, daemon=True).start()
+    # Backs up the SQLite file to GCS (no-op if GCS_BACKUP_BUCKET isn't
+    # configured) so this run survives the next Cloud Run redeploy - see
+    # app/database/backup.py for why this is a snapshot backup, not a live
+    # mounted filesystem.
+    threading.Thread(target=backup_to_gcs, daemon=True).start()
 
     return process_id, final_state
 
@@ -133,6 +139,8 @@ def run_independent_ragas_evaluation(process_id: int, review_artifacts: list[dic
             logger.exception(f"Independent RAGAS evaluation failed for process_id={process_id} "
                               f"round={artifact.get('round_number')}")
     logger.info(f"Independent RAGAS evaluation complete for process_id={process_id}: {len(scores)} round(s) scored")
+    if scores:
+        backup_to_gcs()
     return scores
 
 
@@ -171,6 +179,7 @@ def run_independent_deep_evaluation(process_id: int) -> DeepEvalResult:
         result = deep_evaluate_recommendations(metadata, diagnostics, recommendations)
         crud.save_deep_eval_findings(process_id, result.findings)
         logger.info(f"Independent deep evaluation complete for process_id={process_id}: {len(result.findings)} finding(s)")
+        backup_to_gcs()
         return result
     except Exception:
         logger.exception(f"Independent deep evaluation failed for process_id={process_id}")
@@ -217,6 +226,7 @@ def update_current_state_diagnostics(process_id: int, diagnostics: list[ProcessS
 
     crud.log_audit(process_id, "user", "current_state_diagnostics_edited", {"steps": len(diagnostics)})
     logger.info(f"Updated current-state diagnostics for process_id={process_id}")
+    threading.Thread(target=backup_to_gcs, daemon=True).start()
 
     return {
         "diagnostics": [d.model_dump() for d in diagnostics],

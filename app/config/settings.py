@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     # older than min_retention_days is deleted (repeatedly, oldest-first)
     # until back under budget. See app/database/crud.py:enforce_storage_budget.
     max_storage_mb: float = 500
+    # GCS bucket the SQLite file is backed up to/restored from, so diagnostics
+    # survive a Cloud Run redeploy (the container filesystem itself is
+    # ephemeral). Empty = backup disabled (local dev default). NOT a live
+    # mounted filesystem - SQLite's journal needs seek-and-overwrite writes
+    # that GCS FUSE's buffered writer rejects (confirmed: BufferedWriteHandler
+    # .OutOfOrderError on pe_agent.db-journal). See app/database/backup.py.
+    gcs_backup_bucket: str = ""
 
     # --- OCR ---
     tesseract_cmd: str = "tesseract"

@@ -50,6 +50,13 @@ def session_scope() -> Iterator:
 
 
 def ensure_db_ready() -> None:
+    from app.database.backup import restore_from_gcs
+
+    # Must run before init_db(): if a backup exists in GCS and this is a
+    # fresh container with no local file yet, restore it first so init_db's
+    # CREATE TABLE IF NOT EXISTS applies to the restored data, not a blank
+    # database it would otherwise create.
+    restore_from_gcs()
     init_db()
 
 
@@ -422,5 +429,8 @@ def enforce_storage_budget(max_bytes: Optional[int] = None, min_retention_days: 
         with get_engine().connect() as conn:
             conn.execute(text("VACUUM"))
         logger.info(f"Storage budget enforcement deleted {len(deleted)} process(es) (oldest-first): {deleted}")
+        from app.database.backup import backup_to_gcs
+
+        backup_to_gcs()
 
     return deleted

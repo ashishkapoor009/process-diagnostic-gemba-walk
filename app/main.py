@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.config.settings import get_settings
 from app.database import crud
+from app.database.backup import backup_to_gcs
 from app.database.rehydrate import load_report_context
 from app.extraction.document_parser import SUPPORTED_EXTENSIONS, UnsupportedFormatError, parse_document
 from app.extraction.step_extractor import extract_steps_from_text
@@ -269,6 +270,7 @@ def delete_process(process_id: int) -> dict:
     if not crud.delete_process(process_id):
         raise HTTPException(status_code=404, detail="Process not found.")
     crud.log_audit(None, "user", "process_deleted", {"process_id": process_id})
+    threading.Thread(target=backup_to_gcs, daemon=True).start()
     return {"deleted": True, "process_id": process_id}
 
 
