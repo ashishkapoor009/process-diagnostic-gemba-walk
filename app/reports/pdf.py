@@ -209,7 +209,7 @@ def generate_pdf_report(ctx: ReportContext) -> bytes:
         ])
     story.append(_table(
         appendix_rows, styles,
-        col_widths=[1.1 * cm, 1.7 * cm, 2.2 * cm, 4 * cm, 7.1 * cm, 1.9 * cm],
+        col_widths=[1.3 * cm, 1.6 * cm, 2.3 * cm, 4 * cm, 6.9 * cm, 1.9 * cm],
     ))
 
     doc.build(story)
