@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     sqlite_db_path: str = "./data/pe_agent.db"
     chroma_persist_dir: str = "./data/chroma"
     upload_dir: str = "./data/uploads"
+    # Previous diagnostic runs are kept for at least this many days
+    # regardless of storage pressure (~3 months) - enforce_storage_budget()
+    # never deletes a process younger than this.
+    min_retention_days: int = 90
+    # Soft cap on the SQLite file size; once exceeded, the oldest process
+    # older than min_retention_days is deleted (repeatedly, oldest-first)
+    # until back under budget. See app/database/crud.py:enforce_storage_budget.
+    max_storage_mb: float = 500
 
     # --- OCR ---
     tesseract_cmd: str = "tesseract"
@@ -68,10 +76,14 @@ class Settings(BaseSettings):
     backend_port: int = 8000
 
     @property
-    def sqlite_url(self) -> str:
+    def sqlite_file_path(self) -> Path:
         path = (BASE_DIR / self.sqlite_db_path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
-        return f"sqlite:///{path}"
+        return path
+
+    @property
+    def sqlite_url(self) -> str:
+        return f"sqlite:///{self.sqlite_file_path}"
 
     @property
     def chroma_dir_abs(self) -> str:

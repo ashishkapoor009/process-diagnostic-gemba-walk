@@ -95,6 +95,10 @@ def run_and_persist_pipeline(metadata: ProcessMetadata, raw_steps: list[ProcessS
         threading.Thread(
             target=run_independent_ragas_evaluation, args=(process_id, review_artifacts), daemon=True
         ).start()
+    # Opportunistic retention cleanup: every new run is the natural moment to
+    # check whether storage has grown past budget. Never touches anything
+    # younger than settings.min_retention_days - see enforce_storage_budget.
+    threading.Thread(target=crud.enforce_storage_budget, daemon=True).start()
 
     return process_id, final_state
 

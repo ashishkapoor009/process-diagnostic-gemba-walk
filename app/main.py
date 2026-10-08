@@ -259,6 +259,19 @@ def get_process(process_id: int) -> dict:
     }
 
 
+@api.delete("/api/processes/{process_id}")
+def delete_process(process_id: int) -> dict:
+    """User-initiated deletion of a diagnostic run. The same underlying
+    crud.delete_process is also used by the automatic retention-budget
+    cleanup (see app/services/pipeline_runner.py) - this endpoint is purely
+    the manual trigger for it.
+    """
+    if not crud.delete_process(process_id):
+        raise HTTPException(status_code=404, detail="Process not found.")
+    crud.log_audit(None, "user", "process_deleted", {"process_id": process_id})
+    return {"deleted": True, "process_id": process_id}
+
+
 class UpdateStepsRequest(BaseModel):
     diagnostics: list[ProcessStepDiagnostic]
 

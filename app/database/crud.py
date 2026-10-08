@@ -4,9 +4,13 @@ never have to manage session lifecycle themselves.
 """
 from __future__ import annotations
 
+import datetime as dt
 from contextlib import contextmanager
 from typing import Iterator, Optional
 
+from sqlalchemy import text
+
+from app.config.settings import get_settings
 from app.database.models import (
     AgentResponse,
     AuditLog,
@@ -20,6 +24,7 @@ from app.database.models import (
     Recommendation,
     Upload,
     User,
+    get_engine,
     get_session_factory,
     init_db,
 )
@@ -349,3 +354,73 @@ def get_process_full(process_id: int, step_state: str = "current") -> dict:
             "evaluation_scores": scores,
             "deep_eval_findings": deep_findings,
         }
+
+
+def delete_process(process_id: int) -> bool:
+    """User-initiated (or retention-policy-initiated) deletion of one
+    diagnostic run and everything derived from it. Most child tables
+    (steps, recommendations, agent_responses, evaluation_scores,
+    deep_eval_findings, uploads) cascade automatically via the ORM
+    relationship on Process - rag_history/feedback/audit_logs have a
+    nullable process_id with no such relationship (they're logged
+    independently of any single run), so they're deleted explicitly here
+    to avoid leaving orphan rows behind. Returns False if the process
+    didn't exist.
+    """
+    with session_scope() as db:
+        process = db.get(Process, process_id)
+        if not process:
+            return False
+        db.query(RagHistory).filter(RagHistory.process_id == process_id).delete()
+        db.query(Feedback).filter(Feedback.process_id == process_id).delete()
+        db.query(AuditLog).filter(AuditLog.process_id == process_id).delete()
+        db.delete(process)
+        return True
+
+
+def get_db_file_size_bytes() -> int:
+    path = get_settings().sqlite_file_path
+    return path.stat().st_size if path.exists() else 0
+
+
+def enforce_storage_budget(max_bytes: Optional[int] = None, min_retention_days: Optional[int] = None) -> list[int]:
+    """Keeps the SQLite file under max_bytes by deleting the oldest
+    process(es) first - but never one younger than min_retention_days, so
+    every run stays available for at least that long regardless of storage
+    pressure. Call this opportunistically after persisting new data (see
+    app/services/pipeline_runner.py); it's a no-op whenever the file is
+    already under budget. Returns the ids actually deleted, oldest first.
+    """
+    settings = get_settings()
+    max_bytes = max_bytes if max_bytes is not None else int(settings.max_storage_mb * 1024 * 1024)
+    min_retention_days = min_retention_days if min_retention_days is not None else settings.min_retention_days
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=min_retention_days)
+
+    deleted: list[int] = []
+    while get_db_file_size_bytes() > max_bytes:
+        with session_scope() as db:
+            oldest = (
+                db.query(Process)
+                .filter(Process.created_at < cutoff)
+                .order_by(Process.created_at.asc())
+                .first()
+            )
+            oldest_id = oldest.id if oldest else None
+        if oldest_id is None:
+            # Over budget, but every remaining process is still within the
+            # guaranteed retention window - the size cap is a soft target,
+            # the retention guarantee always wins.
+            break
+        delete_process(oldest_id)
+        deleted.append(oldest_id)
+
+    if deleted:
+        # SQLite doesn't shrink the file on DELETE until the freed pages are
+        # reclaimed - without this, get_db_file_size_bytes() wouldn't reflect
+        # what was just freed and the loop above could delete far more than
+        # necessary before the size check ever drops.
+        with get_engine().connect() as conn:
+            conn.execute(text("VACUUM"))
+        logger.info(f"Storage budget enforcement deleted {len(deleted)} process(es) (oldest-first): {deleted}")
+
+    return deleted
